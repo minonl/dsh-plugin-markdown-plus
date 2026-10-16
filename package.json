@@ -1,5 +1,5 @@
 {
-  "name": "@minonl/dsh-markdown-plus",
+  "name": "@minonl/dsh-plugin-markdown-plus",
   "version": "0.0.1",
   "type": "module",
   "description": "Markdown+ for DeepSeek Harness — enhanced Markdown preview with Mermaid rendering and graceful fallback",

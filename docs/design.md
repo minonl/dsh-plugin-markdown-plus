@@ -1,7 +1,7 @@
 # 设计文档 — dsh-plugin-markdown-plus
 
 > 状态：**设计定稿（待实现）**｜最后更新：2026-10-16
-> 仓库：`github.com/minonl/dsh-plugin-markdown-plus`（public）｜包名：`@minonl/dsh-markdown-plus`
+> 仓库：`github.com/minonl/dsh-plugin-markdown-plus`（public）｜包名：`@minonl/dsh-plugin-markdown-plus`
 > 目标读者：实现者 / 评审者 / 未来的贡献者。**本仓库为公开仓：不得出现任何内部标识、内部路径或凭据**（见 `AGENTS.md`）。
 
 ---
@@ -170,7 +170,7 @@ flowchart LR
 |---|---|---|
 | **G1** | ~~客户端产物形态钉死~~ **✅ 已钉死（2026-10-16，官方 README 取证）+ 构建管线已改造** | 形态错 ⇒ 整个界面打不开（致命） |
 | **G2** | 装机后自检"**客户端半侧是否真的被请求/生效**" | R2 是**静默**失效，只有主动检查才发现 |
-| **G3** | beta 包安装实测（`dsh plugin add @minonl/dsh-markdown-plus@0.1.0-beta.0`） | 官方通道能否"发现+安装+选中生效" |
+| **G3** | beta 包安装实测（`dsh plugin add @minonl/dsh-plugin-markdown-plus@0.1.0-beta.0`） | 官方通道能否"发现+安装+选中生效" |
 | **G4** | 人工验收（用户） | 对外发布不可逆 |
 
 ---
@@ -183,7 +183,7 @@ flowchart LR
    npm publish --registry=https://registry.npmjs.org --tag beta
    # 或 scope 定向（不影响其它包）：~/.npmrc 加 `@minonl:registry=https://registry.npmjs.org/`
    ```
-3. 官方 CLI 实测：`dsh plugin --profile <p> add @minonl/dsh-markdown-plus@0.1.0-beta.0`（含"选中后生效"）；
+3. 官方 CLI 实测：`dsh plugin --profile <p> add @minonl/dsh-plugin-markdown-plus@0.1.0-beta.0`（含"选中后生效"）；
 4. Markdown 回归 + DSH 实机目视；
 5. **⏸ 人工验收（用户）** —— 通过前**不得**正式发布；
 6. 正式发布 `0.1.0`（去掉 beta tag）；
@@ -197,7 +197,7 @@ flowchart LR
 | # | 项 | 状态 | 备注 |
 |---|---|---|---|
 | P1 | **客户端产物形态**（ESM vs 需要包装） | ⚠️ **待实测（G1）** | 当前配置产出 ESM；发布前必须用官方装载器钉死 |
-| P2 | 仓名 `dsh-plugin-markdown-plus` 与包名 `@minonl/dsh-markdown-plus` 是否统一 | 🟡 **待用户确认** | 发布前改名零成本；改名面仅 3 处（package.json / README / lock） |
+| P2 | 仓名 `dsh-plugin-markdown-plus` 与包名 `@minonl/dsh-plugin-markdown-plus` 是否统一 | 🟡 **待用户确认** | 发布前改名零成本；改名面仅 3 处（package.json / README / lock） |
 | P3 | Mermaid 版本策略 | 建议**精确锁定** | 渲染行为随小版本漂移（尺寸/字体），精确锁定便于复现问题 |
 | P4 | 是否做分块（引擎懒加载独立 chunk） | v1 **不做** | 单文件优先保证正确性；体积优化列为 v1.1 |
 | P5 | 大文档阈值 | 建议可配置 + 保守默认 | 见 E3 |

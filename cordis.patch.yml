@@ -1,7 +1,9 @@
-# DSH bundle patch —— 本插件的「bundle patch 层」声明
+# DSH bundle patch —— 本插件的「bundle patch 层」声明。
 #
-# 官方语义（@deepseek-ai/dsh-plugin-manager 的 BundleInfo / PluginManager）：
-#   插件 = npm 依赖 + **bundle patch 层**；profile 用 `dsh.profile.bundles` 选择后生效。
-#   ⚠️ 没有 patch 的依赖即便装上，选中时也会被判 `not-bundle`（不生效）。
-#
-# TODO(scaffold→code): 代码阶段按官方 patch 语法填入注入点（届时以官方类型/示例为准，不臆造）。
+# 官方语义：插件 = npm 依赖 + **bundle patch 层**；profile 用 `dsh.profile.bundles` 选择后生效。
+# ⚠️ 没有 patch 层的依赖即便装上，选中时也会被判 `not-bundle`（不生效）。
+# ⚠️ 必须用 `- insert:` 包裹：裸行会被当成 id 覆盖目标而报 `patch: entry "x" not found`。
+# ⚠️ 不要用本 patch 覆盖宿主行的 config（会整体替换配置）。
+- insert:
+    - id: dsh-plugin-markdown-plus
+      name: '@minonl/dsh-plugin-markdown-plus'

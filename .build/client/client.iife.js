@@ -1,1 +1,1 @@
-var __mdpClient=(function(e){"use strict";const n="markdown-plus-client";function t(){}return e.clientName=n,e.setup=t,Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),e})({});
+var __mdpClient=(function(n){"use strict";const e="@minonl/dsh-plugin-markdown-plus";function t(){}return n.clientName=e,n.setup=t,Object.defineProperty(n,Symbol.toStringTag,{value:"Module"}),n})({});

@@ -12,7 +12,7 @@ Enhanced Markdown preview for **DeepSeek Harness** — Mermaid diagram rendering
 ## Install
 
 ```bash
-dsh plugin --profile <profile> add @minonl/dsh-markdown-plus
+dsh plugin --profile <profile> add @minonl/dsh-plugin-markdown-plus
 # then select the bundle in the profile's `dsh.profile.bundles`
 ```
 
