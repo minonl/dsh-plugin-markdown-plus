@@ -198,6 +198,45 @@ flowchart LR
 |---|---|---|---|
 | P1 | **客户端产物形态**（ESM vs 需要包装） | ⚠️ **待实测（G1）** | 当前配置产出 ESM；发布前必须用官方装载器钉死 |
 | P2 | 仓名 `dsh-plugin-markdown-plus` 与包名 `@minonl/dsh-plugin-markdown-plus` 是否统一 | 🟡 **待用户确认** | 发布前改名零成本；改名面仅 3 处（package.json / README / lock） |
-| P3 | Mermaid 版本策略 | 建议**精确锁定** | 渲染行为随小版本漂移（尺寸/字体），精确锁定便于复现问题 |
-| P4 | 是否做分块（引擎懒加载独立 chunk） | v1 **不做** | 单文件优先保证正确性；体积优化列为 v1.1 |
+| P3 | Mermaid 版本策略 | ✅ 定：**精确锁定**，且放 `devDependencies`（构建期内联） | 渲染行为随小版本漂移；运行时零依赖 |
+| P4 | 是否做分块（引擎懒加载独立 chunk） | v1 **不做**（单文件自包含） | 契约只支持自包含 chunk；体积优化列 v1.1 |
+| P6 | **v1 范围**（竞品已覆盖基础 Mermaid 渲染） | 🟡 **待定** | 见 §10.3：需在"一站式整合"与"细分空白点"间取舍 |
 | P5 | 大文档阈值 | 建议可配置 + 保守默认 | 见 E3 |
+
+---
+
+## 10. 技术路线取证与依赖策略（2026-10-16 补齐，均来自官方源码/公开生态）
+
+### 10.1 接入方式：**DOM 增强**（官方没有 Markdown 代码块扩展点）
+
+官方 Markdown 渲染在 `@deepseek-ai/dsh-client-ui-primitives` 的 `MarkdownText`（micromark 解析 + KaTeX + Shiki 高亮 + 流式缓存）。
+其对外 API 为 `MarkdownText` / `MarkdownDelegateProvider` / `CodeBlock` / `languageForPath` / `CODE_HIGHLIGHT_EXTENSIONS` / `useCodeHighlighter`——
+**不含"自定义围栏渲染器"钩子**（`MarkdownDelegateProvider` 只委托链接打开与文件打开）。
+
+⇒ 结论：插件**无法**从官方渲染管线内部注册 Mermaid 渲染器；可行路线是**在其渲染产物上做 DOM 增强**：
+监听 `<pre><code class="language-mermaid">`（含无语言类但有 mermaid 关键字的兜底），替换为 SVG；失败则**保留源码并显示可读提示**（C5）。
+该路线为生态通行做法（市场同类插件同样只增强 `<pre><code>`、忽略行内代码）。
+
+### 10.2 依赖策略：**运行时零依赖，渲染引擎内联进客户端产物**
+
+| 位置 | 内容 | 理由 |
+|---|---|---|
+| `dependencies` | **无** | 装插件不触发依赖脚本（规避 pnpm 11 依赖脚本门 `pendingBuilds`/`approvedBuilds` 的批准流程） |
+| `devDependencies` | `mermaid`（**精确锁定版本**）+ 构建工具 | 引擎在**构建期**打进自包含客户端产物，符合"入口与 chunk 必须自包含"契约 |
+| `peerDependencies` | 无 | 基座模块（React/Cordis/静态 UI）由宿主冻结模块表提供，**不声明、不打包** |
+
+### 10.3 竞品事实（公开市场，用于定位与差异化判断）
+
+| 同类插件 | 规模 | 覆盖 |
+|---|---|---|
+| `dsh-mermaid` | ★13 / npm `dsh-mermaid@0.4.2` | Mermaid 渲染**全套**：Code/Diagram 切换、失败回源码、懒加载、串行队列、50k 字符 / 2000 行保护、主题、全屏 + 缩放、SVG 导出、中英 i18n、a11y、流式防串号；**0 开放 issue** |
+| `dsh-better-markdown` | ★20 / npm 已发 | 用第三方 `markstream-react` **替换整条流式渲染链路** |
+| `dsh-diagram` | ★18 | Excalidraw 画布 |
+| `dsh-chat-toc` / `dsh-quick-toc` | ★3 / ★1 | 会话大纲（TOC） |
+| `dsh-find-viewer` | ★0 | 侧栏文本查找条 |
+| `dsh-conv-export` / `dsh-md-export` | ★8 / ★1 | 导出 MD / PDF |
+| 市场同类规模 | `markdown` 400 仓、**`mermaid` 62 仓**、`toc` 12 仓 | 单功能赛道高度拥挤 |
+
+⇒ **差异化只能在"整合 + 质量"上取**（一站式覆盖多个单功能点；以及本仓已有的契约自检 / 官方契约钉死 / 一致的降级体验），
+而**不是**在"Mermaid 能否渲染"上。
+
