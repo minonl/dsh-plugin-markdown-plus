@@ -3,17 +3,35 @@
   "version": "0.0.1",
   "type": "module",
   "description": "Markdown+ for DeepSeek Harness — enhanced Markdown preview with Mermaid rendering and graceful fallback",
-  "keywords": ["dsh-plugin", "deepseek-harness", "markdown", "mermaid"],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "markdown",
+    "mermaid"
+  ],
   "license": "MIT",
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/client.js",
     "./package.json": "./package.json"
   },
-  "files": ["dist", "cordis.patch.yml", "README.md", "LICENSE"],
-  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
+  "files": [
+    "dist",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "external": []
+    }
+  },
   "scripts": {
-    "build": "vite build",
+    "build": "bun run scripts/build.mjs",
     "dev": "vite build --watch",
     "typecheck": "tsc --noEmit",
     "test": "bun test"

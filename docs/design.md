@@ -62,9 +62,21 @@ flowchart TB
 | **C5** | **降级可见** | 渲染失败、超时、超大文档一律 **保留源码 + 可见错误提示** | 空白块 = 用户以为文档为空（最差体验） |
 | **C6** | **幂等** | 激活/挂载逻辑可重复执行而不产生重复注册、重复 DOM 或重复事件 | 多标签页/重载后出现双份渲染 |
 
-> ⚠️ **C1 的形态在本仓尚未钉死**：当前 `vite.config.ts` 产出 **ESM**（`formats:['es']`）。
-> 官方客户端装载对产物形态有具体要求（可能要求特定的包装/IIFE 形式）。
-> **这必须在发布 beta 之前用官方装载器实测钉死**（列为 §7 的第一道闸门 G1）——**不得凭猜测发布**。
+> ✅ **C1 已钉死（2026-10-16，证据 = 官方 `@deepseek-ai/dsh-client-modules` README.zh，本机运行版 0.2.0-rc.2 内的副本）**：
+> - 「宿主向 `<head>` 注入 **`window.__ModuleLoader__` queue facade**……执行插件 bundle **只注册其 factory**；
+>    每个模块主体副作用（包括 CSS 注入）都位于 **factory 闭包**中，在物化时运行（`factory(require)` → 导出，在 `loadCache` 中记忆化）」
+>   ⇒ 产物形态 = **`window.__ModuleLoader__.load({ id, factory: function (require) { … return exports } })`**；
+>   **纯 ESM 不行**（`import/export` 无法放进 factory 函数体）。
+> - 「该协议**只支持自包含 chunk**：入口与 chunk 产物**不能同步 require 另一个相对 `client*.js` 产物」⇒ **单文件**（不做 code splitting）。
+> - 「浏览器插件包……以 `platform: 'web'` 声明 **`dsh.client`**，**导出 `./client` bundle**，并在 `dsh.client.external` 列出任何**基座之外**的模块请求」
+>   ⇒ 必须补 `dsh.client`；只用宿主基座（React 等）时 `external: []` 即可。
+> - 「外壳初始化一张**冻结的模块表** `PLATFORM_MODULES`（React、Cordis 与静态 UI 库）；每个动态 bundle 精确针对该基座解析其 external」
+>   ⇒ 客户端代码**不要 `import` 基座模块**（会内联成第二份实例），经 **factory 的 `require`** 取用（R3）。
+> - 「宿主提供的是**已构建**的客户端 bundle……**缺失 bundle 会明确导致激活失败**，并给出构建说明及包/路径列表」⇒ 缺产物是**响亮失败**（好）。
+>
+> **本仓库已按此改造**：宿主半 `vite.config.ts`（ESM → `dist/index.js`）＋ 客户端半 `vite.client.config.ts`（IIFE）＋
+> `scripts/build.mjs` 负责**包装成注册形式**并做产品自检（禁 `module.exports`、禁 ESM 语法、校验注册 id 与包名一致）。
+> 仍待 **G2（实机验证客户端半侧真的被请求）**——那是发布 beta 前的闸门。
 
 ---
 
@@ -156,7 +168,7 @@ flowchart LR
 
 | 闸门 | 内容 | 为什么 |
 |---|---|---|
-| **G1** | 用官方装载机制实测**客户端产物形态**（C1）钉死；必要时改构建配置（IIFE/包装） | 形态错 ⇒ 整个界面打不开（致命） |
+| **G1** | ~~客户端产物形态钉死~~ **✅ 已钉死（2026-10-16，官方 README 取证）+ 构建管线已改造** | 形态错 ⇒ 整个界面打不开（致命） |
 | **G2** | 装机后自检"**客户端半侧是否真的被请求/生效**" | R2 是**静默**失效，只有主动检查才发现 |
 | **G3** | beta 包安装实测（`dsh plugin add @minonl/dsh-markdown-plus@0.1.0-beta.0`） | 官方通道能否"发现+安装+选中生效" |
 | **G4** | 人工验收（用户） | 对外发布不可逆 |
