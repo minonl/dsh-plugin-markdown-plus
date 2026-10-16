@@ -2,12 +2,13 @@
   "name": "@minonl/dsh-plugin-markdown-plus",
   "version": "0.0.1",
   "type": "module",
-  "description": "Markdown+ for DeepSeek Harness — enhanced Markdown preview with Mermaid rendering and graceful fallback",
+  "description": "One-stop Markdown enhancement for DeepSeek Harness Web: Mermaid diagrams with visible degradation, more to come.",
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
     "markdown",
-    "mermaid"
+    "mermaid",
+    "plugin"
   ],
   "license": "MIT",
   "exports": {
@@ -19,6 +20,7 @@
     "dist",
     "cordis.patch.yml",
     "README.md",
+    "README.zh-CN.md",
     "LICENSE"
   ],
   "dsh": {
