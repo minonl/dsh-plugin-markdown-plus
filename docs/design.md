@@ -200,7 +200,8 @@ flowchart LR
 | P2 | 仓名 `dsh-plugin-markdown-plus` 与包名 `@minonl/dsh-plugin-markdown-plus` 是否统一 | 🟡 **待用户确认** | 发布前改名零成本；改名面仅 3 处（package.json / README / lock） |
 | P3 | Mermaid 版本策略 | ✅ 定：**精确锁定**，且放 `devDependencies`（构建期内联） | 渲染行为随小版本漂移；运行时零依赖 |
 | P4 | 是否做分块（引擎懒加载独立 chunk） | v1 **不做**（单文件自包含） | 契约只支持自包含 chunk；体积优化列 v1.1 |
-| P6 | **v1 范围**（竞品已覆盖基础 Mermaid 渲染） | 🟡 **待定** | 见 §10.3：需在"一站式整合"与"细分空白点"间取舍 |
+| P6 | **v1 范围** | ✅ 定：**一站式 Markdown Plus**（见 §11） | 市场单功能件高度拥挤，取"整合 + 质量"差异化 |
+| P7 | 惰性运行时体积（当前 7.4 MB / gzip 1.7 MB） | ⏳ v1.1 优化 | 懒加载 + 不可变缓存已缓解；后续考虑精简图表集 |
 | P5 | 大文档阈值 | 建议可配置 + 保守默认 | 见 E3 |
 
 ---
@@ -239,4 +240,76 @@ flowchart LR
 
 ⇒ **差异化只能在"整合 + 质量"上取**（一站式覆盖多个单功能点；以及本仓已有的契约自检 / 官方契约钉死 / 一致的降级体验），
 而**不是**在"Mermaid 能否渲染"上。
+
+---
+
+## 11. v1 范围与实现架构（2026-10-16 定案：**一站式 Markdown Plus**）
+
+### 11.1 定位
+
+市场同类是**单功能小插件**（`markdown` 相关 400 仓、Mermaid 单一功能 62 仓、TOC / 搜索 / 导出各有零星实现，多为 ★0–3）。
+本插件取**整合 + 质量**差异化：**一个插件覆盖多个增强点**，且每个增强点都遵守同一套
+「**幂等 · 降级可见 · 懒加载 · 零运行时依赖**」契约（见 §3 / §5）。
+
+### 11.2 架构
+
+```mermaid
+flowchart TB
+  subgraph Host["宿主半侧 dist/index.js（Node）"]
+    ROUTE["ctx.webServer.register<br/>exact 路由：/dsh-markdown-plus/runtime/mermaid.js"]
+    ASSET["惰性资产 dist/runtime/mermaid.js<br/>（构建期内联引擎，自包含 ESM）"]
+    ROUTE --- ASSET
+  end
+  subgraph Browser["客户端半侧 dist/client.js（IIFE 注册 factory）"]
+    ENGINE["引擎<br/>MutationObserver + 串行队列 + 幂等标记 + 降级"]
+    MODS["增强模块注册表<br/>mermaid →（后续）toc / find / callout …"]
+    ENGINE --> MODS
+  end
+  HOSTLESS["宿主 Markdown 渲染产物<br/>pre > code.language-mermaid"]
+  HOSTLESS --> ENGINE
+  MODS -. "首次遇到 Mermaid 块才拉取<br/>（?rev=构建戳，长期缓存）" .-> ROUTE
+```
+
+要点：
+
+| 关注点 | 做法 | 依据 |
+|---|---|---|
+| 宿主激活 | `inject = ['webServer']` + `ctx.effect(() => ctx.webServer.register(...))` | 官方 `dsh-host-webserver`：`register` 返回 disposer；空实现会导致客户端产物**永不被请求**（R2） |
+| 引擎内联 | 引擎打进**独立惰性资产**（非 client.js），由宿主按需供出 | 产物自包含契约 + client.js 保持轻量（当前 7 KB vs 资产 7.4 MB） |
+| 缓存 | 资产路径带 `?rev=<build>`，响应 `immutable` | 官方同类做法（revision 变更即失效） |
+| 增强方式 | 官方**没有** Markdown 围栏扩展点 ⇒ DOM 增强（见 §10.1） | 官方 `ui-primitives` 只暴露 `MarkdownText`/`CodeBlock`，无渲染钩子 |
+| 幂等 | 节点标记 `data-mdp-state` + 源码比对 + 引擎单例 | 流式输出会反复重渲染同一段 DOM |
+| 降级 | 保留源码 + 可读提示 + **恒有**重试按钮；引擎加载失败/语法错误/超大源码分别给出原因 | C5：永不留空白块 |
+| 依赖 | 运行时 **0 依赖**；`mermaid` 精确锁在 devDependencies | 规避 pnpm 11 依赖脚本授权流程（§10.2） |
+
+### 11.3 模块接口（新增增强点的唯一扩展点）
+
+```ts
+interface EnhanceModule {
+  readonly id: string;
+  test(block: HTMLPreElement, ctx: EnhanceContext): boolean;      // 是否接管
+  enhance(block: HTMLPreElement, ctx: EnhanceContext): void | Promise<void>; // 执行（失败自行降级）
+  dispose?(): void;
+}
+```
+
+### 11.4 路线
+
+| 版本 | 内容 | 目的 |
+|---|---|---|
+| `0.1.0-beta.0` | 引擎 + **Mermaid**（本轮） | **打通官方通道**（npm 发布 + `dsh plugin add` + 选中生效），验证客户端契约与降级表现 |
+| `0.1.0` | 同上，按验收意见收口 | 首个正式版 |
+| `0.2.0` | + **大纲/锚点（TOC）** | 一站式第二块（市场现有实现均为 ★0–3 的单功能件） |
+| `0.3.0` | + **文档内搜索/高亮** | 同上 |
+| `0.4.0+` | + callout/脚注、表格增强、导出（按需求排序） | 补齐「一个顶五个」 |
+| `1.0.0` | 市场提交（先复核竞品与收录要求） | §8 第 8 步 |
+
+### 11.5 已验证 / 待验证
+
+| 项 | 状态 |
+|---|---|
+| 三段构建（宿主 ESM / 客户端 IIFE 包装 / 惰性运行时 ESM）+ 产物自检 | ✅ 通过（禁止 `module.exports`、校验注册 id、校验宿主注册了 webServer、校验资产自包含且已内联引擎） |
+| 单测：识别（语言类 + 无语言类兜底）、渲染成功、语法错误降级、引擎加载失败降级、超大源码降级、幂等、防串号、引擎幂等、降级重试 | ✅ 11 用例 / 35 断言 |
+| 实机（`dsh plugin add` + 打开真实 `.md`） | ⏳ **待验证（G2/G3）** |
+| 运行时体积优化（7.4 MB → 精简图表集 / 分包） | ⏳ v1.1（P7） |
 

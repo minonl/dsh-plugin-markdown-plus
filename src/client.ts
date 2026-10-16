@@ -1,10 +1,45 @@
 /**
- * 客户端（client）半 —— 浏览器侧 UI 增强。
+ * 客户端（client）半 —— 浏览器侧 Markdown 增强入口。
  *
- * TODO(scaffold→code): 代码阶段填入 —— 增强 Markdown 预览（Mermaid 渲染 + 降级可见）。
- * 约定：本文件编译产物 `dist/client.js`，由 package.json 的 `exports["./client"]` 暴露。
+ * 产物形态：**IIFE 包装成官方模块注册形式**（`window.__ModuleLoader__.load({ id, factory })`），
+ * 由 `scripts/build.mjs` 完成包装与自检。模块副作用（引擎启动、样式注入）在 factory 物化时运行。
  */
-export const clientName = '@minonl/dsh-plugin-markdown-plus';
-export function setup(): void {
-  // TODO(code): 客户端侧挂载
+import { PLUGIN_ID } from './shared.js';
+import { resetEngine, startEngine, type Engine, type EnhanceModule } from './client/engine.js';
+import { mermaidModule } from './client/modules/mermaid.js';
+import { ensureStyles } from './client/styles.js';
+
+/** 模块身份（与包名一致）。 */
+export const clientName = PLUGIN_ID;
+
+/** 默认启用的增强模块（一站式：后续版本在此追加，见设计文档 §11）。 */
+export const defaultModules: readonly EnhanceModule[] = [mermaidModule];
+
+let engine: Engine | null = null;
+
+/** 启动增强（**幂等**：重复调用返回同一引擎）。 */
+export function boot(modules: readonly EnhanceModule[] = defaultModules): Engine {
+  if (engine !== null) return engine;
+  if (typeof document === 'undefined') {
+    // 非浏览器环境（例如 Node 侧误加载）：不抛错，保持可导入。
+    engine = { scan: () => {}, stop: () => {}, modules };
+    return engine;
+  }
+  ensureStyles();
+  engine = startEngine(modules);
+  return engine;
 }
+
+/** 停止并释放（测试 / 热重载）。 */
+export function stop(): void {
+  resetEngine();
+  engine = null;
+}
+
+/** 测试钩子（不影响生产路径）。 */
+export const __test = { boot, stop };
+
+// 模块物化即自启动：插件不依赖任何其它模块的 import（`dsh.client.inject` 为空）。
+boot();
+
+export default { clientName, boot, stop, defaultModules };
