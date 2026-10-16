@@ -16,6 +16,11 @@ dsh plugin --profile <profile> add @minonl/dsh-markdown-plus
 # then select the bundle in the profile's `dsh.profile.bundles`
 ```
 
+## Design
+
+- [Design document](docs/design.md) — plugin model, contracts (C1–C6), boundaries (E1–E10), release gates (G1–G4)
+- [Agent guidance](AGENTS.md)
+
 ## Development
 
 ```bash
