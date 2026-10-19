@@ -15,8 +15,7 @@
     "url": "git+https://github.com/minonl/dsh-plugin-markdown-plus.git"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "engines": {
     "node": ">=22.14.0"
