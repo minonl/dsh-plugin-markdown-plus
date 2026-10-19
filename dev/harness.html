@@ -34,7 +34,7 @@
         <option value="ok">示例：合法图表</option>
         <option value="broken">示例：语法错误</option>
         <option value="huge">示例：超大源码</option>
-        <option value="plain">示例：纯文本</option>
+        <option value="plain">示例：纯文本</option>\n        <option value="longdoc">示例：长文档（大纲演示）</option>
       </select>
       <button id="rerender" type="button">重新挂载引擎</button>
       <button id="toggle-theme" type="button">切换深浅色</button>
@@ -81,6 +81,13 @@
         };
         const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         for (const line of lines) {
+          const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+          if (heading && !inFence) {
+            flushPlain();
+            const level = heading[1].length;
+            out.push(`<h${level}>${escapeHtml(heading[2])}</h${level}>`);
+            continue;
+          }
           const fence = /^```([\w-]*)\s*$/.exec(line);
           if (fence && !inFence) {
             flushPlain(); inFence = true; lang = fence[1] ?? ''; buf = []; continue;
@@ -133,6 +140,51 @@ const a = 1;
         broken: '```mermaid\ngraph TD\n  A-->>\n```',
         huge: '```mermaid\ngraph TD\n' + 'A-->B\n'.repeat(4000) + '```',
         plain: '纯文本段落，没有任何代码块。\n\n第二段。',
+        longdoc: `# 项目说明
+
+## 背景
+
+这是一段用于测试大纲的正文。
+
+### 目标
+
+- 可折叠大纲
+- 点击定位
+
+### 非目标
+
+不做编辑器。
+
+## 架构
+
+### 引擎层
+
+块级增强。
+
+### 模块层
+
+Mermaid 与 TOC。
+
+#### 细节
+
+滚动高亮。
+
+## 使用
+
+\`\`\`mermaid
+flowchart LR
+  A --> B
+\`\`\`
+
+## 常见问题
+
+### 为什么右侧看不到大纲？
+
+窗口太窄时会隐藏。
+
+### 折叠状态会保留吗？
+
+会，存在 localStorage。`,
       };
 
       function rebuild(modules) {
