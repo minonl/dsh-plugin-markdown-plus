@@ -9,7 +9,8 @@ import { join } from 'node:path';
  */
 export default defineConfig({
   root: join(import.meta.dirname, '..'),
-  server: { port: 5183, open: '/dev/harness.html', strictPort: false },
+  // 不自动打开浏览器：调用方（人或 e2e）自己决定，避免干扰正在使用的浏览器
+  server: { port: 5183, open: false, strictPort: false },
   plugins: [
     {
       name: 'mdp-dev-runtime-route',

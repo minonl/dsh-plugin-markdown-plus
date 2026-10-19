@@ -1,0 +1,39 @@
+# 端到端验证：真实浏览器 + 真实引擎，产出截图与报告作为 CI 产物。
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      # CI 用 Playwright 自带 chromium（本地开发默认复用系统 Edge）
+      - run: bunx playwright install --with-deps chromium
+
+      - name: Run e2e
+        env:
+          E2E_CHANNEL: chromium
+        run: bun run test:e2e
+
+      - name: Upload e2e artifacts (screenshots + report)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ github.sha }}
+          path: artifacts/e2e
+          retention-days: 14
