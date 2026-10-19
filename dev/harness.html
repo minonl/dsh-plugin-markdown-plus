@@ -148,9 +148,16 @@ const a = 1;
         document.getElementById('preview').innerHTML = renderMarkdown(src);
         status('已渲染 DOM，等待增强…');
         const blocks = document.querySelectorAll('#preview pre');
-        const settled = () => [...blocks].every((b) => {
+        // 只统计"本插件负责的块"（mermaid 类或无语言类兜底），它们必须落到 rendered/degraded 才算结算
+        const ours = [...blocks].filter((b) => {
+          const code = b.querySelector('code');
+          if (code === null) return false;
+          const cls = [...code.classList].some((c) => /^language-/i.test(c));
+          return !cls || [...code.classList].some((c) => /^language-(mermaid|mermaidjs|mmd)$/i.test(c));
+        });
+        const settled = () => ours.every((b) => {
           const state = b.getAttribute('data-mdp-state');
-          return state === 'rendered' || state === 'degraded' || state === null;
+          return state === 'rendered' || state === 'degraded';
         });
         for (let i = 0; i < 120 && !settled(); i += 1) await new Promise((r) => setTimeout(r, 100));
         const rendered = document.querySelectorAll('#preview .mdp-figure').length;
