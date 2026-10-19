@@ -310,6 +310,10 @@ interface EnhanceModule {
 |---|---|
 | 三段构建（宿主 ESM / 客户端 IIFE 包装 / 惰性运行时 ESM）+ 产物自检 | ✅ 通过（禁止 `module.exports`、校验注册 id、校验宿主注册了 webServer、校验资产自包含且已内联引擎） |
 | 单测：识别（语言类 + 无语言类兜底）、渲染成功、语法错误降级、引擎加载失败降级、超大源码降级、幂等、防串号、引擎幂等、降级重试 | ✅ 11 用例 / 35 断言 |
-| 实机（`dsh plugin add` + 打开真实 `.md`） | ⏳ **待验证（G2/G3）** |
+| 实机 · 安装与组合（`dsh plugin add <绝对路径>`，隔离 profile） | ✅ 通过：pnpm 以 `link:` 装入、**自动追加进 `dsh.profile.bundles`**；`--dump-config` 中条目在位（非 `not-bundle`） |
+| 实机 · 宿主半侧激活（G2 前半） | ✅ 通过：`GET /dsh-markdown-plus/runtime/mermaid.js` → `200`、**7,717,526 字节**、`text/javascript` |
+| 实机 · 客户端半侧被请求（G2 后半） | ✅ 通过：`window.__DSH_BOOT__` 启动图含本插件行（`{id, url, rev}`），组合脚本内含 `window.__ModuleLoader__.load({ id: "@minonl/dsh-plugin-markdown-plus" …})` |
+| 实机 · 浏览器内真实渲染（无头 Chromium + 真实引擎 + 真实产物） | ✅ 通过：合法 flowchart → **1 个 SVG**（`viewBox="4.5 4 190 494"`，`width=100%`）、状态 `rendered`、源码折叠；语法错误 → `degraded` + 「Parse error on line 2」+ 源码保持可见；非图表块未误伤；无异常日志 |
+| 浏览器真实页面内点击验证（DSH 外壳 UI） | ⏳ **人工验收（G4）**：需在 DSH 界面打开真实 `.md` 目视 |
 | 运行时体积优化（7.4 MB → 精简图表集 / 分包） | ⏳ v1.1（P7） |
 
