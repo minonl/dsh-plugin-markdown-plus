@@ -1,7 +1,6 @@
 {
   "name": "@minonl/dsh-plugin-markdown-plus",
   "version": "0.1.0-beta.0",
-  "type": "module",
   "description": "One-stop Markdown enhancement for DeepSeek Harness Web: Mermaid diagrams with visible degradation, more to come.",
   "keywords": [
     "dsh-plugin",
@@ -11,6 +10,18 @@
     "plugin"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/minonl/dsh-plugin-markdown-plus.git"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=22.14.0"
+  },
+  "type": "module",
   "exports": {
     ".": "./dist/index.js",
     "./client": "./dist/client.js",

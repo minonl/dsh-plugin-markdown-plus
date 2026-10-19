@@ -46,7 +46,7 @@ bun run typecheck
 bun test           # DOM-level tests (happy-dom)
 ```
 
-Design and contracts: [docs/design.md](docs/design.md). Agent guidance: [AGENTS.md](AGENTS.md).
+Design and contracts: [docs/design.md](docs/design.md). Release process: [docs/release.md](docs/release.md). Agent guidance: [AGENTS.md](AGENTS.md).
 
 ## License
 
