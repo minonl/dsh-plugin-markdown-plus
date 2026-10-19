@@ -1,6 +1,6 @@
 {
   "name": "@minonl/dsh-plugin-markdown-plus",
-  "version": "0.0.1",
+  "version": "0.1.0-beta.0",
   "type": "module",
   "description": "One-stop Markdown enhancement for DeepSeek Harness Web: Mermaid diagrams with visible degradation, more to come.",
   "keywords": [
@@ -37,7 +37,7 @@
     "dev": "vite --config dev/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test --preload ./test/preload.ts",
-    "prepublishOnly": "bun run build && bun test"
+    "prepublishOnly": "bun run build && bun run test"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^21.0.3",
