@@ -34,7 +34,7 @@
   },
   "scripts": {
     "build": "bun run scripts/build.mjs",
-    "dev": "vite build --watch",
+    "dev": "vite --config dev/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test --preload ./test/preload.ts",
     "prepublishOnly": "bun run build && bun test"

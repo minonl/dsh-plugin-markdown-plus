@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Markdown+ 本地调试台</title>
+    <style>
+      :root { color-scheme: light dark; --fg: #1f2328; --bg: #fff; --muted: #59636e; --line: #d1d9e0; }
+      @media (prefers-color-scheme: dark) { :root { --fg: #e6edf3; --bg: #0d1117; --muted: #9198a1; --line: #30363d; } }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 14px/1.65 ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif; color: var(--fg); background: var(--bg); }
+      header { padding: 12px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; position: sticky; top: 0; background: var(--bg); z-index: 2; }
+      header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+      header .hint { color: var(--muted); font-size: 12px; }
+      header button, header select { font: inherit; font-size: 12px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+      main { display: grid; grid-template-columns: 1fr 1fr; gap: 0; min-height: calc(100vh - 46px); }
+      section { padding: 20px; overflow: auto; }
+      section + section { border-left: 1px solid var(--line); }
+      section h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; }
+      #preview pre { background: color-mix(in srgb, currentColor 5%, transparent); padding: 10px; border-radius: 6px; overflow: auto; }
+      #preview code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+      #source { width: 100%; min-height: calc(100vh - 120px); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.6; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; resize: vertical; }
+      #status { font-size: 12px; color: var(--muted); margin-top: 8px; }
+      @media (max-width: 860px) { main { grid-template-columns: 1fr; } section + section { border-left: 0; border-top: 1px solid var(--line); } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Markdown+ 本地调试台</h1>
+      <span class="hint">左侧编辑 Markdown → 右侧即时增强（真实 Mermaid 引擎，走宿主路由模拟）</span>
+      <span style="flex: 1"></span>
+      <select id="sample" title="示例">
+        <option value="mixed">示例：混合（正常 / 错误 / 大图 / 非图表）</option>
+        <option value="ok">示例：合法图表</option>
+        <option value="broken">示例：语法错误</option>
+        <option value="huge">示例：超大源码</option>
+        <option value="plain">示例：纯文本</option>
+      </select>
+      <button id="rerender" type="button">重新挂载引擎</button>
+      <button id="toggle-theme" type="button">切换深浅色</button>
+    </header>
+    <main>
+      <section>
+        <h2>Markdown 源码</h2>
+        <textarea id="source" spellcheck="false"></textarea>
+        <div id="status">就绪</div>
+      </section>
+      <section>
+        <h2>增强后预览（宿主渲染模拟）</h2>
+        <div id="preview"></div>
+      </section>
+    </main>
+
+    <script type="module">
+      /**
+       * 本地调试台（vite dev）。
+       *
+       * 目的：**不启动 DSH** 也能快速迭代增强逻辑 —— 真实 Mermaid 引擎 + 真实增强代码 + 热更新。
+       * 这里刻意保持"宿主模拟"最小化：只做 fenced code → <pre><code class="language-x"> 的转换，
+       * 与宿主渲染产物形状一致（含"无语言类"退化情形），从而验证真实的识别/降级路径。
+       */
+      const RUNTIME_URL = '/dsh-markdown-plus/runtime/mermaid.js';
+      let engine = null;
+      let runtimeUrlOverride = null;
+
+      const status = (text) => { document.getElementById('status').textContent = text; };
+
+      /** 极简 fenced code 渲染（只覆盖本插件关心的形状）。 */
+      function renderMarkdown(src) {
+        const out = [];
+        const lines = src.split('\n');
+        let inFence = false;
+        let lang = '';
+        let buf = [];
+        let plain = [];
+        const flushPlain = () => {
+          if (plain.length === 0) return;
+          const text = plain.join('\n').trim();
+          if (text !== '') out.push(`<p>${escapeHtml(text).replace(/\n/g, '<br>')}</p>`);
+          plain = [];
+        };
+        const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        for (const line of lines) {
+          const fence = /^```([\w-]*)\s*$/.exec(line);
+          if (fence && !inFence) {
+            flushPlain(); inFence = true; lang = fence[1] ?? ''; buf = []; continue;
+          }
+          if (fence && inFence) {
+            // 有语言类 → 带 language-* 类；无语言类 → 纯 <code>（覆盖宿主退化情形）
+            const cls = lang === '' ? '' : ` class="language-${lang}"`;
+            out.push(`<pre><code${cls}>${escapeHtml(buf.join('\n'))}</code></pre>`);
+            inFence = false; buf = []; continue;
+          }
+          if (inFence) buf.push(line); else plain.push(line);
+        }
+        if (inFence) out.push(`<pre><code${lang ? ` class="language-${lang}"` : ''}>${escapeHtml(buf.join('\n'))}</code></pre>`);
+        flushPlain();
+        return out.join('\n');
+      }
+
+      const SAMPLES = {
+        mixed: `# 混合场景
+
+普通段落：这段不是代码块，不应被处理。
+
+\`\`\`mermaid
+flowchart TD
+  A[开始] --> B{判断}
+  B -->|是| C[结束]
+  B -->|否| A
+\`\`\`
+
+语法错误的块（应降级并保留源码）：
+
+\`\`\`mermaid
+graph TD
+  A-->>  %%% 坏语法
+\`\`\`
+
+无语言类的兜底识别（宿主退化情形）：
+
+\`\`\`
+sequenceDiagram
+  A->>B: 你好
+\`\`\`
+
+非图表块（不应被处理）：
+
+\`\`\`ts
+const a = 1;
+\`\`\``,
+        ok: '```mermaid\nflowchart LR\n  A --> B --> C\n```',
+        broken: '```mermaid\ngraph TD\n  A-->>\n```',
+        huge: '```mermaid\ngraph TD\n' + 'A-->B\n'.repeat(4000) + '```',
+        plain: '纯文本段落，没有任何代码块。\n\n第二段。',
+      };
+
+      function rebuild(modules) {
+        // 每次重建都销毁旧引擎（验证幂等/清理路径）
+        engine?.stop?.();
+        const { boot, stop } = window.__mdp;
+        stop();
+        engine = boot(modules);
+      }
+
+      async function applyPreview() {
+        const src = document.getElementById('source').value;
+        document.getElementById('preview').innerHTML = renderMarkdown(src);
+        status('已渲染 DOM，等待增强…');
+        const blocks = document.querySelectorAll('#preview pre');
+        const settled = () => [...blocks].every((b) => {
+          const state = b.getAttribute('data-mdp-state');
+          return state === 'rendered' || state === 'degraded' || state === null;
+        });
+        for (let i = 0; i < 120 && !settled(); i += 1) await new Promise((r) => setTimeout(r, 100));
+        const rendered = document.querySelectorAll('#preview .mdp-figure').length;
+        const degraded = document.querySelectorAll('#preview .mdp-note').length;
+        status(`代码块 ${blocks.length} 个 · 已出图 ${rendered} · 降级 ${degraded}`);
+      }
+
+      // —— 宿主模拟：把宿主会注入的全局补上 ——
+      window.__ModuleLoader__ = {
+        load({ id, factory }) {
+          try { window.__mdpLoaded = factory(() => { throw new Error('本地调试台：未预期的 require'); }); }
+          catch (error) { console.error('[harness] 模块注册失败', id, error); }
+        },
+      };
+
+      // —— 加载增强代码（vite dev：TS 源直接可用，改代码即热更新） ——
+      const engineMod = await import('/src/client/engine.ts');
+      const mermaidMod = await import('/src/client/modules/mermaid.ts');
+      const runtimeMod = await import('/src/client/runtime.ts');
+      const stylesMod = await import('/src/client/styles.ts');
+      const { boot, stop } = await import('/src/client.ts');
+
+      // 运行时走宿主路由模拟（vite 中间件）
+      runtimeMod.setRuntimeLoaderForTesting(async (url) => {
+        const target = runtimeUrlOverride ?? url;
+        const res = await fetch(target);
+        if (!res.ok) throw new Error(`HTTP ${res.status} ${target}`);
+        const source = await res.text();
+        const blob = new Blob([source], { type: 'text/javascript' });
+        return import(/* @vite-ignore */ URL.createObjectURL(blob));
+      });
+
+      window.__mdp = { boot, stop, engine: engineMod, mermaid: mermaidMod, runtime: runtimeMod, styles: stylesMod };
+      stylesMod.ensureStyles();
+      engine = boot(mermaidMod.defaultModules ?? [mermaidMod.mermaidModule]);
+
+      document.getElementById('sample').addEventListener('change', (e) => {
+        document.getElementById('source').value = SAMPLES[e.target.value] ?? '';
+        applyPreview();
+      });
+      document.getElementById('source').addEventListener('input', () => { clearTimeout(window.__t); window.__t = setTimeout(applyPreview, 300); });
+      document.getElementById('rerender').addEventListener('click', () => { rebuild([mermaidMod.mermaidModule]); applyPreview(); });
+      document.getElementById('toggle-theme').addEventListener('click', () => {
+        const root = document.documentElement;
+        const dark = root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches);
+        root.dataset.theme = dark ? 'light' : 'dark';
+        rebuild([mermaidMod.mermaidModule]);
+        applyPreview();
+      });
+
+      document.getElementById('source').value = SAMPLES.mixed;
+      await applyPreview();
+    </script>
+  </body>
+</html>

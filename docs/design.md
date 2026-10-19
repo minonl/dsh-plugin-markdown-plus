@@ -316,4 +316,14 @@ interface EnhanceModule {
 | 实机 · 浏览器内真实渲染（无头 Chromium + 真实引擎 + 真实产物） | ✅ 通过：合法 flowchart → **1 个 SVG**（`viewBox="4.5 4 190 494"`，`width=100%`）、状态 `rendered`、源码折叠；语法错误 → `degraded` + 「Parse error on line 2」+ 源码保持可见；非图表块未误伤；无异常日志 |
 | 浏览器真实页面内点击验证（DSH 外壳 UI） | ⏳ **人工验收（G4）**：需在 DSH 界面打开真实 `.md` 目视 |
 | 运行时体积优化（7.4 MB → 精简图表集 / 分包） | ⏳ v1.1（P7） |
+### 11.6 本地独立调试（vite dev，不依赖 DSH）
+
+`bun run dev` 起一个独立的调试台（`http://localhost:5183/dev/harness.html`），用于**快速迭代增强逻辑**：
+
+- 左侧编辑 Markdown，右侧即时看到增强结果；内置示例（混合 / 合法 / 语法错误 / 超大 / 纯文本）；
+- `/src/**` 直接以 TS 源提供 ⇒ 改代码热更新，无需先构建产物；
+- `/dsh-markdown-plus/runtime/mermaid.js` 由 vite 中间件**模拟宿主路由**（现场构建引擎、不写盘）⇒ 走的是与线上一致的"按需拉取"路径；
+- 页面里的"宿主渲染模拟"刻意保留**无语言类的纯 `<code>`** 情形，用来验证兜底识别。
+
+该目录只服务开发，不进入 npm 包（`files` 白名单不含 `dev/`）。
 
