@@ -6,16 +6,22 @@
  */
 import { PLUGIN_ID } from './shared.js';
 import { resetEngine, startEngine, type Engine, type EnhanceModule } from './client/engine.js';
+import { startDocModules, type DocEngine, type DocModule } from './client/docs.js';
 import { mermaidModule } from './client/modules/mermaid.js';
+import { tocModule } from './client/modules/toc.js';
 import { ensureStyles } from './client/styles.js';
 
 /** 模块身份（与包名一致）。 */
 export const clientName = PLUGIN_ID;
 
-/** 默认启用的增强模块（一站式：后续版本在此追加，见设计文档 §11）。 */
+/** 默认启用的**块级**增强模块（作用于 `pre>code`）。 */
 export const defaultModules: readonly EnhanceModule[] = [mermaidModule];
 
+/** 默认启用的**文档级**增强模块（作用于整页结构）。 */
+export const defaultDocModules: readonly DocModule[] = [tocModule];
+
 let engine: Engine | null = null;
+let docEngine: DocEngine | null = null;
 
 /** 启动增强（**幂等**：重复调用返回同一引擎）。 */
 export function boot(modules: readonly EnhanceModule[] = defaultModules): Engine {
@@ -27,11 +33,14 @@ export function boot(modules: readonly EnhanceModule[] = defaultModules): Engine
   }
   ensureStyles();
   engine = startEngine(modules);
+  docEngine = startDocModules(defaultDocModules);
   return engine;
 }
 
 /** 停止并释放（测试 / 热重载）。 */
 export function stop(): void {
+  docEngine?.stop();
+  docEngine = null;
   resetEngine();
   engine = null;
 }
@@ -42,4 +51,4 @@ export const __test = { boot, stop };
 // 模块物化即自启动：插件不依赖任何其它模块的 import（`dsh.client.inject` 为空）。
 boot();
 
-export default { clientName, boot, stop, defaultModules };
+export default { clientName, boot, stop, defaultModules, defaultDocModules };

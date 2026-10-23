@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+    <link rel="icon" href="data:," /><title>e2e · mermaid</title></head>
+<body>
+<!-- e2e 夹具：合法图 / 语法错误 / 非图表 / 无语言类兜底 -->
+<main>
+  <h1>Mermaid 场景</h1>
+  <pre><code class="language-mermaid">flowchart TD
+  A[开始] --> B{判断}
+  B -->|是| C[结束]
+  B -->|否| A</code></pre>
+  <pre><code class="language-mermaid">graph TD
+  A-->>  %%% 坏语法
+</code></pre>
+  <pre><code class="language-ts">const a = 1;</code></pre>
+  <pre><code>sequenceDiagram
+  A->>B: 你好
+  B-->>A: 收到</code></pre>
+</main>
+<script type="module">
+  await import('/src/client.ts');
+  window.__e2eReady = true;
+</script>
+</body></html>

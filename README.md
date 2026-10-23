@@ -46,7 +46,7 @@ bun run typecheck
 bun test           # DOM-level tests (happy-dom)
 ```
 
-Design and contracts: [docs/design.md](docs/design.md). Release process: [docs/release.md](docs/release.md). Local registry testing: [docs/local-registry-testing.md](docs/local-registry-testing.md). Agent guidance: [AGENTS.md](AGENTS.md).
+Design and contracts: [docs/design.md](docs/design.md). Release process: [docs/release.md](docs/release.md). Local registry testing: [docs/local-registry-testing.md](docs/local-registry-testing.md). E2E: [docs/e2e.md](docs/e2e.md). Agent guidance: [AGENTS.md](AGENTS.md).
 
 ## License
 
