@@ -12,7 +12,7 @@ One plugin instead of five. Every enhancement follows the same contract: **idemp
 
 - **Mermaid diagrams.** ```mermaid fences (also `mermaidjs` / `mmd`) render to inline SVG; blocks without a language class are recognised by their first keyword, which covers the plain-`<code>` fallback.
 - **Visible degradation, never a blank block.** Syntax errors, engine load failures and oversized sources each keep the original source in place, state the reason, and offer retry.
-- **Lazy by construction.** The diagram engine is bundled once into a separate asset served by the plugin's own host half and fetched only when the first diagram appears. `client.js` stays ~7 KB.
+- **Lazy by construction.** The diagram engine is bundled once into a separate asset served by the plugin's own host half and fetched only when the first diagram appears. `client.js` stays ~13 KB.
 - **Streaming-safe.** A serial render queue yields between diagrams, and results that arrive after their block changed or left the document are discarded.
 - **No runtime dependencies.** The engine is pinned in `devDependencies` and inlined at build time, so installing the plugin runs no dependency build scripts and needs no CDN.
 

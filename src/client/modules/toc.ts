@@ -32,6 +32,8 @@ interface TocState {
   collapsed: boolean;
   onScroll: (() => void) | null;
   rafPending: boolean;
+  /** 标题结构签名：用于「结构没变就不重写 DOM」，避免自己的写入再触发刷新。 */
+  signature: string | null;
 }
 
 const state: TocState = {
@@ -42,6 +44,7 @@ const state: TocState = {
   collapsed: readCollapsed(),
   onScroll: null,
   rafPending: false,
+  signature: null,
 };
 
 function readCollapsed(): boolean {
@@ -74,6 +77,11 @@ function collectHeadings(doc: Document): TocEntry[] {
     entries.push({ el, level: Number(el.tagName.slice(1)) || 6, text });
   }
   return entries;
+}
+
+/** 标题结构签名：层级 + 文案；结构相同即无需重写列表。 */
+function signatureOf(entries: readonly TocEntry[]): string {
+  return entries.map((entry) => `${entry.level}\u0000${entry.text}`).join('\u0001');
 }
 
 function ensurePanel(doc: Document): { panel: HTMLElement; list: HTMLElement } {
@@ -198,8 +206,11 @@ function renderList(doc: Document, list: HTMLElement, entries: TocEntry[]): void
     button.textContent = entry.text;
     button.title = entry.text;
     button.addEventListener('click', () => {
+      // 按索引取当前元素：流式重渲染可能已替换 DOM 节点，闭包里的旧引用会指向游离节点。
+      const target = state.entries[index];
+      if (target === undefined) return;
       setActive(index);
-      scrollToEntry(entry);
+      scrollToEntry(target);
     });
     li.append(button);
     fragment.append(li);
@@ -217,6 +228,7 @@ function teardown(): void {
   state.list = null;
   state.entries = [];
   state.activeIndex = -1;
+  state.signature = null;
 }
 
 export const tocModule: DocModule = {
@@ -228,10 +240,17 @@ export const tocModule: DocModule = {
       teardown();
       return;
     }
-    const { list } = ensurePanel(doc);
+    // **结构没变就不重写 DOM**：文档级 observer 观察整页子树，自己的写入会被再次观察到，
+    // 不设这道闸就会每 250ms 刷新一次、永不停止（实测：一次宿主写入引发 6 次 refresh）。
+    const signature = signatureOf(entries);
+    const unchanged = state.panel !== null && state.list !== null && state.signature === signature;
     state.entries = entries;
-    renderList(doc, list, entries);
-    state.activeIndex = -1;
+    if (!unchanged) {
+      const { list } = ensurePanel(doc);
+      renderList(doc, list, entries);
+      state.activeIndex = -1;
+      state.signature = signature;
+    }
     bindScroll();
     updateActiveByScroll();
   },

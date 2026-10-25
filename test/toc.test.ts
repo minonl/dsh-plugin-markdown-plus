@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 
-import { startDocModules } from '../src/client/docs.js';
+import { startDocModules, type DocModule } from '../src/client/docs.js';
 import { tocModule } from '../src/client/modules/toc.js';
 
 const PANEL = '[data-mdp-toc]';
@@ -111,5 +111,27 @@ describe('大纲模块', () => {
     await new Promise((r) => setTimeout(r, 400));
     expect(document.querySelectorAll(ITEM).length).toBe(3);
     engine.stop();
+  });
+
+  test('不自触发刷新：宿主写入后不会每 250ms 空转', async () => {
+    setBody('<main><h1>一</h1><h2>二</h2></main>');
+    let calls = 0;
+    const counting: DocModule = {
+      id: 'toc-count',
+      refresh: (doc) => {
+        calls += 1;
+        tocModule.refresh(doc);
+      },
+    };
+    const engine = startDocModules([counting]);
+    await new Promise((r) => setTimeout(r, 20));
+    const afterBoot = calls;
+
+    // 模拟宿主流式渲染的一次写入；若模块自己的 DOM 写入再触发刷新，这里会持续增长
+    document.querySelector('main')!.append(document.createElement('p'));
+    await new Promise((r) => setTimeout(r, 900));
+    engine.stop();
+
+    expect(calls - afterBoot).toBe(1);
   });
 });
