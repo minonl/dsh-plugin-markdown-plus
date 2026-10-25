@@ -22,6 +22,12 @@ One plugin instead of five. Every enhancement follows the same contract: **idemp
 dsh plugin --profile <profile> add @minonl/dsh-plugin-markdown-plus
 ```
 
+Pre-release builds sit on the `experimental` dist-tag (published from the `publish` workflow, may break):
+
+```bash
+dsh plugin --profile <profile> add @minonl/dsh-plugin-markdown-plus@experimental
+```
+
 ## How it works
 
 DSH does not expose a Markdown fence-render hook, so the plugin enhances the rendered DOM:

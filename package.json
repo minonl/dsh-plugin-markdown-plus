@@ -47,7 +47,8 @@
     "dev": "vite --config dev/vite.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test --preload ./test/preload.ts",
-    "prepublishOnly": "bun run build && bun run test",
+    "prepublishOnly": "bun run build && bun run test && bun run check:tarball",
+    "check:tarball": "node scripts/check-tarball.mjs",
     "test:e2e": "bun run scripts/e2e.mjs"
   },
   "devDependencies": {

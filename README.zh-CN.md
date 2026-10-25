@@ -22,6 +22,12 @@
 dsh plugin --profile <profile> add @minonl/dsh-plugin-markdown-plus
 ```
 
+预发布版本走 `experimental` dist-tag（由 `publish` 工作流手动发布，可能不稳定）：
+
+```bash
+dsh plugin --profile <profile> add @minonl/dsh-plugin-markdown-plus@experimental
+```
+
 ## 工作原理
 
 DSH 未开放 Markdown 围栏渲染钩子，因此插件在渲染产物上做增强：

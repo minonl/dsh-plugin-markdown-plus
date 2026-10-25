@@ -17,7 +17,7 @@
 | ✅ | 流式安全 | 渲染结果与源码比对，节点被改写/移除则丢弃 |
 | ✅ | 体积保护 | 单图 > 50,000 字符或 > 2,000 行直接降级（不加载引擎） |
 | ✅ | 本地调试台 | `bun run dev` 起独立页面（真实引擎 + 热更新），不依赖 DSH |
-| 🚧 | 发布通道 | npm Trusted Publishing（OIDC）+ tag 触发 CI；**待 npm 账号安全冻结解除**（已用 Verdaccio 验证安装链路） |
+| 🚧 | 发布通道 | npm Trusted Publishing（OIDC）：tag → 正式/beta，手动 dispatch → `0.0.0-experimental.<run>`（`experimental`）；发布前过发包内容闸门；**待人工自举首发**（Verdaccio 安装链路已验证） |
 
 ## v0.2.0 — 大纲（TOC）✅ 代码完成
 

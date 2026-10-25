@@ -28,7 +28,9 @@ bun test             # automated tests — must pass before every push
 3. **No secrets, no internal identifiers, no internal paths** in code, docs, tests, or CI config —
    this repository is public.
 4. **Docs**: design docs live in `docs/`; update them in the same change as behaviour.
-5. **Publishing** happens from a tagged release; the maintainer reviews before any public release.
+5. **Publishing** goes through the `publish` workflow only: experimental builds come from a manual
+   `workflow_dispatch` (`0.0.0-experimental.<run_number>`, dist-tag `experimental`), releases from a `v*`
+   tag that matches `package.json`. The maintainer reviews before any public release — see `docs/release.md`.
 
 ## 分支与合并纪律（强制）
 
