@@ -143,3 +143,42 @@ dsh --profile <profile> --dump-config | grep -A2 markdown-plus   # 条目在位 
 
 - npm 账号被安全冻结期间（历史上发生过）CI 会 403：先按 [本地 registry 验证](local-registry-testing.md) 把安装路径跑通，解冻后再发。
 - 构建产物（`.build/`、`*.tgz`）**不入库**：`dist/` 由 CI 现场构建，仓库只存源码。
+
+## 备用通道：GitHub Release tarball（不依赖 npm）
+
+npm 侧（2FA / 账号风控）不稳定时，用这条通道发布。它与 npm 通道**互不影响**，同一个 tag 会同时触发两条：
+
+```bash
+git tag v0.1.0-beta.1 && git push origin v0.1.0-beta.1
+```
+
+`release.yml` 会：构建 → 跑同一套闸门（typecheck / test / build / `check:tarball`）→
+`npm pack` → 生成 `SHA256SUMS.txt` → 创建 GitHub Release 并附上 `.tgz`。
+
+用户安装（官方 install-spec 的 `tarball` 形态，与 registry 安装等价）：
+
+```bash
+dsh plugin --profile <p> add \
+  https://github.com/minonl/dsh-plugin-markdown-plus/releases/download/v0.1.0-beta.1/minonl-dsh-plugin-markdown-plus-0.1.0-beta.1.tgz
+```
+
+本地验证（已实测：`file:` 依赖 + bundle 选中 + patch 生效 + 运行时路由 200 + 启动图登记）：
+
+```bash
+npm pack --silent
+dsh plugin --profile <p> add "$PWD"/minonl-dsh-plugin-markdown-plus-*.tgz
+```
+
+手动触发（不打 tag，只产出可下载的 CI 产物）：
+
+```
+Actions → release → Run workflow
+```
+
+### 三条通道对比
+
+| 通道 | 触发 | 产物 | 需要 npm 账号 | 适用 |
+|---|---|---|---|---|
+| `publish.yml`（tag） | 推 `v*` | npm registry | 是（Trusted Publishing / 首次 bootstrap） | 正式对外 |
+| `publish.yml`（dispatch） | 手动 | npm `experimental` 标签 | 是 | 自测 / 内部试装 |
+| **`release.yml`** | 推 `v*` 或手动 | **GitHub Release `.tgz`** | **否** | npm 不可用时兜底 |
