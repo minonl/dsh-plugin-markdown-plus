@@ -112,14 +112,14 @@ jobs:
         run: |
           set -euo pipefail
           PKG=$(node -p "require('./package.json').name")
-          for i in $(seq 1 10); do
+          for i in $(seq 1 60); do
             if npm view "$PKG@$VERSION" version >/dev/null 2>&1; then
               npm view "$PKG@$VERSION" version dist.tarball
               exit 0
             fi
-            sleep 6
+            sleep 5
           done
-          echo "::error::$PKG@$VERSION 在 registry 上查不到（重试 10 次）"
+          echo "::error::$PKG@$VERSION 在 registry 上查不到（重试 60 次 / 5 分钟）"
           exit 1
 
       - name: Summary
