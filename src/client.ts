@@ -48,7 +48,18 @@ export function stop(): void {
 /** 测试钩子（不影响生产路径）。 */
 export const __test = { boot, stop };
 
-// 模块物化即自启动：插件不依赖任何其它模块的 import（`dsh.client.inject` 为空）。
-boot();
+/**
+ * Cordis 插件契约（**必需**）：DSH 的客户端半侧会被 `ctx.plugin(exports)` 挂载，
+ * 因此必须导出 `name` 与 `apply`——只导出普通函数对象会报
+ * `invalid plugin, expect function or object with an "apply" method, received object`。
+ */
+export const name = PLUGIN_ID;
 
-export default { clientName, boot, stop, defaultModules, defaultDocModules };
+/** 不依赖其它客户端模块。 */
+export const inject: readonly string[] = [];
+
+export function apply(): void {
+  boot();
+}
+
+export default { name, inject, apply, clientName, boot, stop, defaultModules, defaultDocModules };
