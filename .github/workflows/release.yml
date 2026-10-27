@@ -1,0 +1,79 @@
+# 不依赖 npm 的发布通道：tag → 构建 → 打包 → GitHub Release 资产（.tgz + 校验和）。
+#
+# 为什么需要它：npm 侧（2FA / 账号风控）不稳定时，用户仍可通过 tarball 安装：
+#   dsh plugin --profile <p> add https://github.com/minonl/dsh-plugin-markdown-plus/releases/download/v<ver>/<file>.tgz
+# 该形态是官方 install-spec 的一等形态（kind: "tarball"），与 registry 安装等价。
+#
+# 与 publish.yml（npm）互不影响：同一个 tag 可以同时触发两条通道。
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 创建/更新 GitHub Release
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - run: bun install --frozen-lockfile
+
+      - name: Verify tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          echo "tag=$TAG package.json=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::tag $TAG does not match package.json version $PKG"
+            exit 1
+          fi
+
+      # 与 npm 通道同一套闸门
+      - run: bun run typecheck
+      - run: bun test --preload ./test/preload.ts
+      - run: bun run build
+      - run: bun run check:tarball
+
+      - name: Pack tarball
+        run: |
+          npm pack --silent
+          ls -la ./*.tgz
+          sha256sum ./*.tgz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish GitHub Release (tag only)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" ./*.tgz SHA256SUMS.txt \
+            --title "${GITHUB_REF_NAME}" --generate-notes
+
+      - name: Upload tarball artifact (manual dispatch)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tarball-${{ github.sha }}
+          path: |
+            *.tgz
+            SHA256SUMS.txt
+          retention-days: 14

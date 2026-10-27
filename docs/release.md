@@ -143,3 +143,109 @@ dsh --profile <profile> --dump-config | grep -A2 markdown-plus   # 条目在位 
 
 - npm 账号被安全冻结期间（历史上发生过）CI 会 403：先按 [本地 registry 验证](local-registry-testing.md) 把安装路径跑通，解冻后再发。
 - 构建产物（`.build/`、`*.tgz`）**不入库**：`dist/` 由 CI 现场构建，仓库只存源码。
+
+## 备用通道：GitHub Release tarball（不依赖 npm）
+
+npm 侧（2FA / 账号风控）不稳定时，用这条通道发布。它与 npm 通道**互不影响**，同一个 tag 会同时触发两条：
+
+```bash
+git tag v0.1.0-beta.1 && git push origin v0.1.0-beta.1
+```
+
+`release.yml` 会：构建 → 跑同一套闸门（typecheck / test / build / `check:tarball`）→
+`npm pack` → 生成 `SHA256SUMS.txt` → 创建 GitHub Release 并附上 `.tgz`。
+
+用户安装（官方 install-spec 的 `tarball` 形态，与 registry 安装等价）：
+
+```bash
+dsh plugin --profile <p> add \
+  https://github.com/minonl/dsh-plugin-markdown-plus/releases/download/v0.1.0-beta.1/minonl-dsh-plugin-markdown-plus-0.1.0-beta.1.tgz
+```
+
+本地验证（已实测：`file:` 依赖 + bundle 选中 + patch 生效 + 运行时路由 200 + 启动图登记）：
+
+```bash
+npm pack --silent
+dsh plugin --profile <p> add "$PWD"/minonl-dsh-plugin-markdown-plus-*.tgz
+```
+
+手动触发（不打 tag，只产出可下载的 CI 产物）：
+
+```
+Actions → release → Run workflow
+```
+
+### 三条通道对比
+
+| 通道 | 触发 | 产物 | 需要 npm 账号 | 适用 |
+|---|---|---|---|---|
+| `publish.yml`（tag） | 推 `v*` | npm registry | 是（Trusted Publishing / 首次 bootstrap） | 正式对外 |
+| `publish.yml`（dispatch） | 手动 | npm `experimental` 标签 | 是 | 自测 / 内部试装 |
+| **`release.yml`** | 推 `v*` 或手动 | **GitHub Release `.tgz`** | **否** | npm 不可用时兜底 |
+
+### npm 通道开关
+
+npm 账号异常期间，tag 触发时 **跳过** npm 发布（避免红灯），tarball 通道照常工作：
+
+```bash
+gh variable set NPM_PUBLISH_ENABLED --body true     # 恢复 npm 发布
+gh variable delete NPM_PUBLISH_ENABLED              # 暂停 npm 发布（默认）
+```
+
+手动触发（`workflow_dispatch` 实验包）不受该开关限制。
+
+## 实战记录：从「没有包」到「CI 自动发布」（2026-10-27 首次打通）
+
+npm 的规则决定了**首次发布必须人工自举**：Trusted Publisher 的配置入口在包设置页，
+而包不存在就没有设置页。完整流程与踩坑如下。
+
+### 自举步骤（只需一次）
+
+```bash
+# 1) 登录（passkey-only 账号也要走这一步；CLI 会给出 auth/cli 链接）
+npm login --auth-type=web
+
+# 2) 免 2FA 地把包「放进」registry（会创建 0.0.0-stage 占位版 + 暂存本次版本）
+npm stage publish --tag beta --access public
+#    → staged with id <stage-id>
+
+# 3) 批准暂存版本（这次需要 2FA；CLI 给出 auth/cli 链接，浏览器确认）
+npm stage approve <stage-id>
+
+# 4) 配置 Trusted Publisher（需要 2FA）
+npm trust github @minonl/dsh-plugin-markdown-plus \
+  --file publish.yml --repo minonl/dsh-plugin-markdown-plus \
+  --allow-publish --yes
+
+# 5) 修正 dist-tag（见下方坑 #3）
+npm dist-tag add @minonl/dsh-plugin-markdown-plus@<ver> latest
+
+# 6) 打开 npm 通道开关，之后全靠 CI
+gh variable set NPM_PUBLISH_ENABLED --body true
+git tag v<ver> && git push origin v<ver>
+```
+
+### 踩坑清单
+
+| # | 现象 | 原因 | 处理 |
+|---|---|---|---|
+| 1 | `npm view` 一直 404，但 `npm trust` 能配 | 包只存在于暂存区，尚未批准 | `npm stage approve <id>`（或先在网页 Staged Packages 里批准） |
+| 2 | CI 发布 `E409 Cannot publish over previously staged version` | 同一版本既暂存又要直接发布 | 要么批准暂存版；要么换个版本号再发 |
+| 3 | `latest` 指向 `0.0.0-stage`（裸装会装到空占位包） | 首次暂存会创建占位版本并抢 `latest` | `npm dist-tag add <pkg>@<ver> latest`（需一次 2FA） |
+| 4 | CI 发布成功但 Verify 步骤红 | 新包在 registry 传播需**数分钟**，原窗口只有 60s | 已把窗口改为 5 分钟（`publish.yml`） |
+| 5 | `npm publish` 报 `EUSAGE: Automatic provenance generation not supported for provider: null` | 本地（非 OIDC 环境）配了 `publishConfig.provenance: true` | 去掉该字段；provenance 由 CI 的 OIDC 自动附带 |
+| 6 | `npm publish` 一直 EOTP / 404，但账号正常 | 账号在**安全冻结期**（改密码/2FA 后 72 小时只读） | 等 72h；或先用 `npm stage publish`（免 2FA）+ 网页批准 |
+| 7 | passkey-only 账号在 CLI 里拿不到 OTP | 2FA 是安全密钥，不是 TOTP | 用 `auth-type=web`；CLI 会打印 `auth/cli/<id>` 链接，浏览器用 passkey 确认 |
+
+### 发布后的健康检查
+
+```bash
+npm view @minonl/dsh-plugin-markdown-plus dist-tags versions
+# 期望：latest/beta 指向真实版本；没有指向 0.0.0-stage
+
+# 真实安装验证（换一个干净 profile）
+dsh --profile <test> --from-default-profile web --dump-config >/dev/null
+dsh plugin --profile <test> add @minonl/dsh-plugin-markdown-plus@<ver>
+dsh --profile <test> --no-open
+#   核对：GET /dsh-markdown-plus/runtime/mermaid.js → 200；__DSH_BOOT__ 含本插件
+```
