@@ -181,15 +181,15 @@ try {
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
-  await page.goto(url, { waitUntil: 'load', timeout: 30000 });
+  await page.goto(url, { waitUntil: 'load', timeout: 90000 });
   // 应用外壳就绪：Root 有内容
-  await page.waitForFunction(() => (document.getElementById('root')?.children.length ?? 0) > 0, null, { timeout: 30000 });
+  await page.waitForFunction(() => (document.getElementById('root')?.children.length ?? 0) > 0, null, { timeout: 90000 });
   await page.screenshot({ path: join(outDir, 'app.png'), fullPage: false });
 
   // ——— 断言 b：客户端半侧真的执行了（样式注入是 boot() 的副作用）———
   let styles = false;
   try {
-    await page.waitForFunction(() => document.getElementById('mdp/styles') !== null, null, { timeout: 30000 });
+    await page.waitForFunction(() => document.getElementById('mdp/styles') !== null, null, { timeout: 90000 });
     styles = true;
   } catch {
     /* 由下面的 record 记录失败 */
@@ -214,7 +214,7 @@ try {
     await page.waitForFunction(
       () => document.querySelector('[data-mdp-toc]') !== null && document.querySelectorAll('[data-mdp-toc-item]').length >= 3,
       null,
-      { timeout: 10000 },
+      { timeout: 30000 },
     );
   } catch {
     tocReady = false;
@@ -243,7 +243,7 @@ try {
   });
   let mermaidOk = true;
   try {
-    await page.waitForFunction(() => document.querySelector('#mdp-mermaid-fixture .mdp-figure svg') !== null, null, { timeout: 30000 });
+    await page.waitForFunction(() => document.querySelector('#mdp-mermaid-fixture .mdp-figure svg') !== null, null, { timeout: 90000 });
   } catch {
     mermaidOk = false;
   }
@@ -272,7 +272,7 @@ try {
     await page.waitForFunction(
       () => /Parse error/.test(document.querySelector('#mdp-mermaid-fixture .mdp-note-label')?.textContent ?? ''),
       null,
-      { timeout: 30000 },
+      { timeout: 90000 },
     );
   } catch {
     degradedOk = false;

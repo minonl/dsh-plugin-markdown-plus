@@ -63,6 +63,8 @@ try {
   browser = await chromium.launch(channel === 'chromium' ? { headless: true } : { channel, headless: true });
   console.log(`  浏览器: ${channel}`);
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  context.setDefaultTimeout(180_000);
+  context.setDefaultNavigationTimeout(120_000);
 
   // ——— 场景 1：Mermaid ———
   {
@@ -70,8 +72,13 @@ try {
     watch(page, 'mermaid');
     await page.goto(`${BASE}/dev/e2e/mermaid.html`, { waitUntil: 'load' });
     await page.waitForFunction(() => window.__e2eReady === true, null, { timeout: 15000 });
+    // CI 上引擎资产由 dev 中间件**首次请求时现场构建**（~30s+），先预热，避免占用断言等待窗口
+    await page.evaluate(async () => {
+      const res = await fetch('/dsh-markdown-plus/runtime/mermaid.js');
+      return (await res.text()).length;
+    });
     // 等两张图出现（真实引擎需要时间）
-    await page.waitForFunction(() => document.querySelectorAll('.mdp-figure svg').length >= 2, null, { timeout: 60000 });
+    await page.waitForFunction(() => document.querySelectorAll('.mdp-figure svg').length >= 2, null, { timeout: 180000 });
 
     const stats = await page.evaluate(() => ({
       figures: document.querySelectorAll('.mdp-figure svg').length,

@@ -18,7 +18,9 @@
   B-->>A: 收到</code></pre>
 </main>
 <script type="module">
-  await import('/src/client.ts');
+  // 显式启动：客户端半侧的副作用已收敛到 Cordis 的 apply()（不再有模块级自启动）
+  const { boot } = await import('/src/client.ts');
+  boot();
   window.__e2eReady = true;
 </script>
 </body></html>
