@@ -44,3 +44,35 @@ artifacts/e2e/<时间戳>/
 
 mermaid 需要真实布局与测量 API（`getBBox` 等），无头 DOM 里连合法流程图都会解析失败。
 happy-dom 只用于**单元测试**（桩运行时）；真实渲染一律走浏览器。
+
+## 真实 DSH 集成 e2e（`bun run test:e2e:dsh`）
+
+**这条才是「插件是否真的能装上并生效」的门**——它不看源码，而是走用户路径：
+
+```
+bun run build → npm pack → 建临时 profile → dsh plugin add <tgz>
+→ dsh --profile <tmp> --no-open → Playwright 打开（带 token）
+→ 断言：客户端半侧执行 / 无 invalid plugin / TOC 生成 / Mermaid 渲染 / 降级可见
+```
+
+| 断言 | 拦截什么 |
+|---|---|
+| `#mdp/styles` 存在 | 客户端半侧根本没执行（factory 未物化） |
+| 无 `invalid plugin` 报错 | 客户端导出不是 Cordis 插件（**缺 `apply`**） |
+| 出现 `[data-mdp-toc]` 且条目 ≥3 | 文档级模块在真实宿主里不起作用 |
+| 出现 `.mdp-figure svg` | 宿主路由/引擎加载链路断 |
+| 坏语法有降级提示且源码可见 | 降级契约回归 |
+
+环境变量：
+
+| 变量 | 用途 |
+|---|---|
+| `MDP_DSH_PORT` | dsh web 端口（默认 3080；被占用会**直接失败**，不复用也不杀别人实例） |
+| `MDP_TGZ` | 复用已有 tarball，跳过 build+pack |
+| `E2E_CHANNEL` | 本地默认 `msedge`（复用系统 Edge），CI 用 `chromium` |
+| `DSH_HOME` | 覆盖 profile 根目录 |
+
+产物：`artifacts/e2e-dsh/<时间戳>/{app.png,toc.png,mermaid.png,report.json}`；失败时额外出 `failure.png`。
+
+> 反向验证过：把 default export 上的 `apply` 去掉后，这条 e2e 会精确复现
+> `invalid plugin, expect function or object with an "apply" method, received object` 并 fail。
