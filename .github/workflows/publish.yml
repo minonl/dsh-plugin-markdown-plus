@@ -33,6 +33,10 @@ concurrency:
 
 jobs:
   publish:
+    # npm 通道开关：仓库变量 NPM_PUBLISH_ENABLED=true 时才在 tag 上发布。
+    # 为什么：tarball 通道（release.yml）不需要 npm，npm 账号异常时不应让 tag 构建变红。
+    # 手动触发（workflow_dispatch）不受此开关限制（实验包是显式操作）。
+    if: github.event_name == 'workflow_dispatch' || vars.NPM_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

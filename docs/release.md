@@ -182,3 +182,14 @@ Actions → release → Run workflow
 | `publish.yml`（tag） | 推 `v*` | npm registry | 是（Trusted Publishing / 首次 bootstrap） | 正式对外 |
 | `publish.yml`（dispatch） | 手动 | npm `experimental` 标签 | 是 | 自测 / 内部试装 |
 | **`release.yml`** | 推 `v*` 或手动 | **GitHub Release `.tgz`** | **否** | npm 不可用时兜底 |
+
+### npm 通道开关
+
+npm 账号异常期间，tag 触发时 **跳过** npm 发布（避免红灯），tarball 通道照常工作：
+
+```bash
+gh variable set NPM_PUBLISH_ENABLED --body true     # 恢复 npm 发布
+gh variable delete NPM_PUBLISH_ENABLED              # 暂停 npm 发布（默认）
+```
+
+手动触发（`workflow_dispatch` 实验包）不受该开关限制。
