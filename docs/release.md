@@ -193,3 +193,59 @@ gh variable delete NPM_PUBLISH_ENABLED              # 暂停 npm 发布（默认
 ```
 
 手动触发（`workflow_dispatch` 实验包）不受该开关限制。
+
+## 实战记录：从「没有包」到「CI 自动发布」（2026-10-27 首次打通）
+
+npm 的规则决定了**首次发布必须人工自举**：Trusted Publisher 的配置入口在包设置页，
+而包不存在就没有设置页。完整流程与踩坑如下。
+
+### 自举步骤（只需一次）
+
+```bash
+# 1) 登录（passkey-only 账号也要走这一步；CLI 会给出 auth/cli 链接）
+npm login --auth-type=web
+
+# 2) 免 2FA 地把包「放进」registry（会创建 0.0.0-stage 占位版 + 暂存本次版本）
+npm stage publish --tag beta --access public
+#    → staged with id <stage-id>
+
+# 3) 批准暂存版本（这次需要 2FA；CLI 给出 auth/cli 链接，浏览器确认）
+npm stage approve <stage-id>
+
+# 4) 配置 Trusted Publisher（需要 2FA）
+npm trust github @minonl/dsh-plugin-markdown-plus \
+  --file publish.yml --repo minonl/dsh-plugin-markdown-plus \
+  --allow-publish --yes
+
+# 5) 修正 dist-tag（见下方坑 #3）
+npm dist-tag add @minonl/dsh-plugin-markdown-plus@<ver> latest
+
+# 6) 打开 npm 通道开关，之后全靠 CI
+gh variable set NPM_PUBLISH_ENABLED --body true
+git tag v<ver> && git push origin v<ver>
+```
+
+### 踩坑清单
+
+| # | 现象 | 原因 | 处理 |
+|---|---|---|---|
+| 1 | `npm view` 一直 404，但 `npm trust` 能配 | 包只存在于暂存区，尚未批准 | `npm stage approve <id>`（或先在网页 Staged Packages 里批准） |
+| 2 | CI 发布 `E409 Cannot publish over previously staged version` | 同一版本既暂存又要直接发布 | 要么批准暂存版；要么换个版本号再发 |
+| 3 | `latest` 指向 `0.0.0-stage`（裸装会装到空占位包） | 首次暂存会创建占位版本并抢 `latest` | `npm dist-tag add <pkg>@<ver> latest`（需一次 2FA） |
+| 4 | CI 发布成功但 Verify 步骤红 | 新包在 registry 传播需**数分钟**，原窗口只有 60s | 已把窗口改为 5 分钟（`publish.yml`） |
+| 5 | `npm publish` 报 `EUSAGE: Automatic provenance generation not supported for provider: null` | 本地（非 OIDC 环境）配了 `publishConfig.provenance: true` | 去掉该字段；provenance 由 CI 的 OIDC 自动附带 |
+| 6 | `npm publish` 一直 EOTP / 404，但账号正常 | 账号在**安全冻结期**（改密码/2FA 后 72 小时只读） | 等 72h；或先用 `npm stage publish`（免 2FA）+ 网页批准 |
+| 7 | passkey-only 账号在 CLI 里拿不到 OTP | 2FA 是安全密钥，不是 TOTP | 用 `auth-type=web`；CLI 会打印 `auth/cli/<id>` 链接，浏览器用 passkey 确认 |
+
+### 发布后的健康检查
+
+```bash
+npm view @minonl/dsh-plugin-markdown-plus dist-tags versions
+# 期望：latest/beta 指向真实版本；没有指向 0.0.0-stage
+
+# 真实安装验证（换一个干净 profile）
+dsh --profile <test> --from-default-profile web --dump-config >/dev/null
+dsh plugin --profile <test> add @minonl/dsh-plugin-markdown-plus@<ver>
+dsh --profile <test> --no-open
+#   核对：GET /dsh-markdown-plus/runtime/mermaid.js → 200；__DSH_BOOT__ 含本插件
+```
