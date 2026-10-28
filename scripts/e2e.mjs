@@ -103,6 +103,11 @@ try {
     await page.waitForFunction(() => window.__e2eReady === true, null, { timeout: 15000 });
     await page.waitForSelector('[data-mdp-toc]', { timeout: 15000 });
     await page.waitForFunction(() => document.querySelectorAll('[data-mdp-toc-item]').length === 9, null, { timeout: 15000 });
+    // 默认折叠（对齐 GitHub Docs）：先展开，后续点击/滚动断言才有可见目标
+    if (await page.evaluate(() => document.querySelector('[data-mdp-toc]')?.classList.contains('mdp-toc-collapsed') ?? false)) {
+      await page.click('.mdp-toc-toggle');
+      await page.waitForTimeout(300);
+    }
 
     const toc = await page.evaluate(() => ({
       count: document.querySelectorAll('[data-mdp-toc-item]').length,
@@ -129,11 +134,13 @@ try {
     record('toc: 滚动时高亮跟随（scroll spy）', afterScroll >= 6, `active=${afterScroll}`);
     await page.screenshot({ path: `${outDir}/toc.png`, fullPage: false });
 
-    // 折叠
+    // 折叠：展开态点一次应变折叠
     await page.click('.mdp-toc-toggle');
     await page.waitForTimeout(200);
     const collapsed = await page.evaluate(() => document.querySelector('[data-mdp-toc]')?.classList.contains('mdp-toc-collapsed') === true);
     record('toc: 可折叠', collapsed === true, `collapsed=${collapsed}`);
+    await page.click('.mdp-toc-toggle');
+    await page.waitForTimeout(200);
     await page.screenshot({ path: `${outDir}/toc-collapsed.png`, fullPage: false });
 
     // 幂等：同一内容重复刷新不产生重复面板/条目

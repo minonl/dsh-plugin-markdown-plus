@@ -54,9 +54,11 @@ const state: TocState = {
 
 function readCollapsed(): boolean {
   try {
-    return globalThis.localStorage?.getItem(STORAGE_KEY) === '1';
+    const stored = globalThis.localStorage?.getItem(STORAGE_KEY);
+    // 未存过偏好 → 折叠（对齐 GitHub Docs 的「In this article」：默认一条，点开展开）
+    return stored === null ? true : stored === '1';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -172,7 +174,9 @@ function ensurePanel(doc: Document, container: HTMLElement): { panel: HTMLElemen
   list.className = 'mdp-toc-list';
 
   panel.append(header, list);
-  // 挂在容器内部、内容之前：不遮挡正文，滚动时随内容一起离开视口
+  // 挂在容器内部、滚动区**之上**：不遮挡正文，正文滚动时它保持可见（= 吸顶）
+  // flex: 0 0 auto 必须显式设置，否则 flex 容器会把它压扁（UX 实测 39px）
+  panel.style.flex = '0 0 auto';
   container.prepend(panel);
 
   state.panel = panel;
@@ -199,10 +203,14 @@ function setActive(index: number): void {
     else item.removeAttribute(ACTIVE_ATTR);
   });
   state.activeIndex = index;
+  // 只调整列表自身的 scrollTop（不能用 scrollIntoView：会把整页/dialog 一起滚走 —— Reviewer S6）
   const active = items[index];
-  if (active !== undefined && typeof active.scrollIntoView === 'function') {
-    // 只让大纲自身滚动，不影响页面
-    active.scrollIntoView({ block: 'nearest' });
+  const list = state.list;
+  if (active !== undefined && list !== null) {
+    const top = active.offsetTop;
+    const bottom = top + active.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight;
   }
 }
 

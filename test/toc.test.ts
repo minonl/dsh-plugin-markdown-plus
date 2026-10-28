@@ -94,11 +94,11 @@ describe('大纲模块', () => {
     setBody('<main><h1>一</h1><h2>二</h2></main>');
     refresh();
     const toggle = document.querySelector<HTMLButtonElement>('.mdp-toc-toggle') as HTMLButtonElement;
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    toggle.click();
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(localStorage.getItem('mdp:toc:collapsed')).toBe('1');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');   // 默认折叠（对齐 GitHub Docs）
     expect(document.querySelector(PANEL)?.classList.contains('mdp-toc-collapsed')).toBe(true);
+    toggle.click();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(localStorage.getItem('mdp:toc:collapsed')).toBe('0');
   });
 
   test('文档级引擎：DOM 变化后自动重建大纲', async () => {

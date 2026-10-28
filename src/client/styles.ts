@@ -38,13 +38,11 @@ export const CSS = `
   cursor: pointer;
 }
 .mdp-toc {
-  /* 停靠在预览容器内部：sticky 保持可见，float 让正文绕排，不遮挡内容 */
-  position: sticky;
-  top: 8px;
-  float: right;
-  margin: 0 0 8px 12px;
-  width: 200px;
-  max-height: 55vh;
+  /* 停靠在预览容器内部、滚动区之上：正文滚动时保持可见（吸顶），不遮挡内容 */
+  position: relative;
+  width: 100%;
+  max-height: none;
+  margin: 0;
   display: flex;
   flex-direction: column;
   font-size: 12.5px;
@@ -70,8 +68,11 @@ export const CSS = `
   border-radius: 4px; background: transparent; color: inherit; cursor: pointer;
 }
 .mdp-toc-list {
-  list-style: none; margin: 0; padding: 4px 0;
+  list-style: none; margin: 0; padding: 4px 8px 8px 12px;
+  max-height: 40vh;
   overflow-y: auto; overscroll-behavior: contain;
+  border-inline-start: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  margin-inline-start: 8px;
 }
 .mdp-toc-entry { margin: 0; }
 .mdp-toc-item {
@@ -84,14 +85,9 @@ export const CSS = `
 .mdp-toc-item[aria-current="true"] {
   opacity: 1; font-weight: 600;
   box-shadow: inset 2px 0 0 currentColor;
-  background: color-mix(in srgb, currentColor 10%, transparent);
 }
 .mdp-toc-collapsed .mdp-toc-list { display: none; }
-.mdp-toc-collapsed {
-  width: fit-content;
-  min-width: 92px;
-  max-height: none;
-}
+.mdp-toc-collapsed { max-height: 34px; }
 @media (max-width: 1180px) { .mdp-toc { display: none; } }
 `;
 
