@@ -38,11 +38,13 @@ export const CSS = `
   cursor: pointer;
 }
 .mdp-toc {
-  position: fixed;
-  top: 96px;
-  right: 20px;
-  width: 232px;
-  max-height: calc(100vh - 140px);
+  /* 停靠在预览容器内部：sticky 保持可见，float 让正文绕排，不遮挡内容 */
+  position: sticky;
+  top: 8px;
+  float: right;
+  margin: 0 0 8px 12px;
+  width: 200px;
+  max-height: 55vh;
   display: flex;
   flex-direction: column;
   font-size: 12.5px;
@@ -85,6 +87,11 @@ export const CSS = `
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 .mdp-toc-collapsed .mdp-toc-list { display: none; }
+.mdp-toc-collapsed {
+  width: fit-content;
+  min-width: 92px;
+  max-height: none;
+}
 @media (max-width: 1180px) { .mdp-toc { display: none; } }
 `;
 

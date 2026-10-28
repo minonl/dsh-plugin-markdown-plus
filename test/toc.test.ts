@@ -134,4 +134,35 @@ describe('大纲模块', () => {
 
     expect(calls - afterBoot).toBe(1);
   });
+
+  test('宿主重渲染导致面板脱离文档后能自愈（Reviewer B1）', () => {
+    setBody('<main><h1>一</h1><h2>二</h2></main>');
+    refresh();
+    expect(document.querySelectorAll(ITEM).length).toBe(2);
+    // 模拟宿主重渲染：面板随旧子树一起被丢弃，但标题结构不变
+    document.querySelector('[data-mdp-toc]')?.remove();
+    refresh();
+    expect(document.querySelectorAll('[data-mdp-toc]').length).toBe(1);
+    expect(document.querySelectorAll(ITEM).length).toBe(2);
+  });
+
+  test('两篇标题结构相同的文档：切换后仍生成大纲（Reviewer B2）', () => {
+    setBody('<div data-sidebar-right-tab id="a"><h1>Install</h1><h2>Usage</h2></div>');
+    refresh();
+    const first = document.querySelector('[data-mdp-toc]');
+    expect(first?.closest('#a')).not.toBeNull();
+    // 第一篇不再有标题（等价于切走），第二篇结构完全相同
+    document.querySelector('#a')!.innerHTML = '<p>空</p>';
+    document.body.insertAdjacentHTML('beforeend', '<div data-sidebar-right-tab id="b"><h1>Install</h1><h2>Usage</h2></div>');
+    refresh();
+    const panel = document.querySelector('[data-mdp-toc]');
+    expect(document.querySelectorAll('[data-mdp-toc]').length).toBe(1);
+    expect(panel?.closest('#b')).not.toBeNull();
+  });
+
+  test('作用域负向：页面有标题但既无预览容器也无 main 时不生成', () => {
+    setBody('<div id="session-list"><h1>会话标题</h1><h2>另一条</h2></div>');
+    refresh();
+    expect(document.querySelectorAll('[data-mdp-toc]').length).toBe(0);
+  });
 });

@@ -58,8 +58,10 @@ export const name = PLUGIN_ID;
 /** 不依赖其它客户端模块。 */
 export const inject: readonly string[] = [];
 
-export function apply(): void {
+export function apply(ctx?: { effect?: (fn: () => unknown, label?: string) => unknown }): void {
   boot();
+  // Cordis 卸载/热更新时停掉观察器，避免遗留监听（Reviewer S11）
+  ctx?.effect?.(() => () => stop(), 'markdown-plus: teardown');
 }
 
 export default { name, inject, apply, clientName, boot, stop, defaultModules, defaultDocModules };

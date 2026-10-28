@@ -31,9 +31,12 @@ interface TocState {
   activeIndex: number;
   collapsed: boolean;
   onScroll: (() => void) | null;
+  scrollTarget: (HTMLElement | Window) | null;
   rafPending: boolean;
   /** 标题结构签名：用于「结构没变就不重写 DOM」，避免自己的写入再触发刷新。 */
   signature: string | null;
+  /** 当前面板所属的预览容器：容器一变就必须重建（多 tab / 宿主重渲染）。 */
+  scope: HTMLElement | null;
 }
 
 const state: TocState = {
@@ -43,8 +46,10 @@ const state: TocState = {
   activeIndex: -1,
   collapsed: readCollapsed(),
   onScroll: null,
+  scrollTarget: null,
   rafPending: false,
   signature: null,
+  scope: null,
 };
 
 function readCollapsed(): boolean {
@@ -63,10 +68,13 @@ function writeCollapsed(collapsed: boolean): void {
   }
 }
 
-/** 收集标题：排除代码块、导航、以及本插件自己的产物。 */
-function collectHeadings(doc: Document): TocEntry[] {
-  const scope: ParentNode = doc.querySelector('main') ?? doc.body;
-  if (scope === null) return [];
+/**
+ * 作用域：**只看 Markdown 预览容器**（DSH 右侧文档面板 `[data-sidebar-right-tab]`）。
+ * 绝不扫描整页 —— 否则会话列表/聊天区也会被当成一篇文档，出现"到处是大纲"的噪音。
+ * dev harness 与单测没有该容器时回退到 `main`。
+ */
+function collectHeadings(container: ParentNode): TocEntry[] {
+  const scope: ParentNode = container;
   const nodes = scope.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6');
   const entries: TocEntry[] = [];
   for (const el of nodes) {
@@ -80,12 +88,51 @@ function collectHeadings(doc: Document): TocEntry[] {
 }
 
 /** 标题结构签名：层级 + 文案；结构相同即无需重写列表。 */
+/**
+ * 找到"该给哪个容器生成大纲"：
+ *  1. DSH 右侧文档预览的 tab 容器（`[data-sidebar-right-tab]`，且标题数达标）
+ *  2. 回退到 `<main>`（dev harness / 单测）
+ *  3. 都没有 → 不生成（宁可不做，也不要在整页乱贴大纲）
+ */
+function findScope(doc: Document): HTMLElement | null {
+  const qualifies = (el: HTMLElement): boolean =>
+    el.querySelectorAll('h1,h2,h3,h4,h5,h6').length >= MIN_HEADINGS;
+  for (const pane of doc.querySelectorAll<HTMLElement>('[data-sidebar-right-tab]')) {
+    if (qualifies(pane)) return pane;
+  }
+  const main = doc.querySelector<HTMLElement>('main');
+  return main !== null && qualifies(main) ? main : null;
+}
+
+/** 找容器内真正滚动的元素（scroll spy 要听它，而不是 window）。 */
+function scrollTargetFor(scope: HTMLElement): HTMLElement | Window {
+  // 1) 容器内部的滚动区（DSH 文档正文在 `.scrollport` 里滚，而不是 window）
+  const inner =
+    scope.querySelector<HTMLElement>('[class*="scrollport"]') ??
+    [...scope.querySelectorAll<HTMLElement>('div,section')]
+      .slice(0, 300)
+      .find((el) => {
+        const cs = getComputedStyle(el);
+        return (cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 1;
+      }) ??
+    null;
+  if (inner !== null) return inner;
+  // 2) 祖先链
+  let el: HTMLElement | null = scope;
+  while (el !== null && el !== document.body) {
+    const overflowY = getComputedStyle(el).overflowY;
+    if (overflowY === 'auto' || overflowY === 'scroll') return el;
+    el = el.parentElement;
+  }
+  return window;
+}
+
 function signatureOf(entries: readonly TocEntry[]): string {
   return entries.map((entry) => `${entry.level}\u0000${entry.text}`).join('\u0001');
 }
 
-function ensurePanel(doc: Document): { panel: HTMLElement; list: HTMLElement } {
-  const existing = doc.querySelector<HTMLElement>(`[${PANEL_ATTR}]`);
+function ensurePanel(doc: Document, container: HTMLElement): { panel: HTMLElement; list: HTMLElement } {
+  const existing = container.querySelector<HTMLElement>(`[${PANEL_ATTR}]`);
   if (existing !== null) {
     const list = existing.querySelector<HTMLElement>(`.mdp-toc-list`);
     if (list !== null) {
@@ -125,7 +172,8 @@ function ensurePanel(doc: Document): { panel: HTMLElement; list: HTMLElement } {
   list.className = 'mdp-toc-list';
 
   panel.append(header, list);
-  doc.body.append(panel);
+  // 挂在容器内部、内容之前：不遮挡正文，滚动时随内容一起离开视口
+  container.prepend(panel);
 
   state.panel = panel;
   state.list = list;
@@ -176,8 +224,12 @@ function updateActiveByScroll(): void {
   setActive(index);
 }
 
-function bindScroll(): void {
-  if (state.onScroll !== null) return;
+function bindScroll(target: HTMLElement | Window = window): void {
+  if (state.onScroll !== null && state.scrollTarget === target) return;
+  if (state.onScroll !== null && state.scrollTarget !== null) {
+    state.scrollTarget.removeEventListener?.('scroll', state.onScroll);
+    state.onScroll = null;
+  }
   const handler = (): void => {
     if (state.rafPending) return;
     state.rafPending = true;
@@ -189,7 +241,8 @@ function bindScroll(): void {
     else setTimeout(run, 16);
   };
   state.onScroll = handler;
-  globalThis.addEventListener?.('scroll', handler, { passive: true });
+  state.scrollTarget = target;
+  target.addEventListener?.('scroll', handler, { passive: true });
 }
 
 function renderList(doc: Document, list: HTMLElement, entries: TocEntry[]): void {
@@ -219,8 +272,9 @@ function renderList(doc: Document, list: HTMLElement, entries: TocEntry[]): void
 }
 
 function teardown(): void {
+  for (const stale of document.querySelectorAll(`[${PANEL_ATTR}]`)) stale.remove();
   if (state.onScroll !== null) {
-    globalThis.removeEventListener?.('scroll', state.onScroll);
+    state.scrollTarget?.removeEventListener?.('scroll', state.onScroll);
     state.onScroll = null;
   }
   state.panel?.remove();
@@ -235,7 +289,12 @@ export const tocModule: DocModule = {
   id: 'toc',
 
   refresh(doc: Document): void {
-    const entries = collectHeadings(doc);
+    const scope = findScope(doc);
+    if (scope === null) {
+      teardown();
+      return;
+    }
+    const entries = collectHeadings(scope);
     if (entries.length < MIN_HEADINGS) {
       teardown();
       return;
@@ -243,15 +302,24 @@ export const tocModule: DocModule = {
     // **结构没变就不重写 DOM**：文档级 observer 观察整页子树，自己的写入会被再次观察到，
     // 不设这道闸就会每 250ms 刷新一次、永不停止（实测：一次宿主写入引发 6 次 refresh）。
     const signature = signatureOf(entries);
-    const unchanged = state.panel !== null && state.list !== null && state.signature === signature;
+    // 面板必须「还活着、还挂在这个 scope 里、结构未变」才算无需重建；
+    // 宿主重渲染（保存/主题切换/流式）会让旧面板脱离文档，此时必须重建（B1/B2）。
+    const unchanged =
+      state.panel !== null &&
+      state.list !== null &&
+      state.scope === scope &&
+      state.panel.isConnected &&
+      state.panel.parentElement === scope &&
+      state.signature === signature;
     state.entries = entries;
     if (!unchanged) {
-      const { list } = ensurePanel(doc);
+      const { list } = ensurePanel(doc, scope);
       renderList(doc, list, entries);
       state.activeIndex = -1;
       state.signature = signature;
+      state.scope = scope;
     }
-    bindScroll();
+    bindScroll(scrollTargetFor(scope));
     updateActiveByScroll();
   },
 
