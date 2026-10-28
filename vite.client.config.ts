@@ -17,6 +17,8 @@ export default defineConfig({
     minify: 'esbuild',
     target: 'es2022',
     sourcemap: false,
-    rollupOptions: { output: { inlineDynamicImports: true } },
+    // 具名 + default 混用会让 Rollup 告警（消费方需 .default）；显式声明 named 导出，
+    // 产物对象同时带具名导出与 default，DSH 的 unwrapExports（exports.default ?? exports）两种都能取到。
+    rollupOptions: { output: { inlineDynamicImports: true, exports: 'named' } },
   },
 });

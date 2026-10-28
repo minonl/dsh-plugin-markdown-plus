@@ -275,7 +275,7 @@ flowchart TB
 | 关注点 | 做法 | 依据 |
 |---|---|---|
 | 宿主激活 | `inject = ['webServer']` + `ctx.effect(() => ctx.webServer.register(...))` | 官方 `dsh-host-webserver`：`register` 返回 disposer；空实现会导致客户端产物**永不被请求**（R2） |
-| 引擎内联 | 引擎打进**独立惰性资产**（非 client.js），由宿主按需供出 | 产物自包含契约 + client.js 保持轻量（当前 7 KB vs 资产 7.4 MB） |
+| 引擎内联 | 引擎打进**独立惰性资产**（非 client.js），由宿主按需供出 | 产物自包含契约 + client.js 保持轻量（当前 ~13 KB vs 资产 7.4 MB） |
 | 缓存 | 资产路径带 `?rev=<build>`，响应 `immutable` | 官方同类做法（revision 变更即失效） |
 | 增强方式 | 官方**没有** Markdown 围栏扩展点 ⇒ DOM 增强（见 §10.1） | 官方 `ui-primitives` 只暴露 `MarkdownText`/`CodeBlock`，无渲染钩子 |
 | 幂等 | 节点标记 `data-mdp-state` + 源码比对 + 引擎单例 | 流式输出会反复重渲染同一段 DOM |
@@ -293,13 +293,31 @@ interface EnhanceModule {
 }
 ```
 
+**文档级模块（`src/client/docs.ts`，2026-10-23 随 TOC 引入）**：面向**整页结构**的增强点（大纲、后续的文档内搜索），
+与块级 `pre>code` 引擎分工——块级的输入是一个代码块，文档级的输入是整篇文档的标题结构，两者的触发频率与生命周期不同，
+混在一起会让块级渲染队列被整页扫描拖慢。
+
+```ts
+interface DocModule {
+  readonly id: string;
+  refresh(doc: Document): void;   // 必须幂等
+  dispose?(): void;
+}
+```
+
+| 约定 | 内容 | 违反的后果 |
+|---|---|---|
+| 触发 | 文档级 MutationObserver + **250ms 防抖**，一次批量重算全部文档级模块 | 流式输出时逐块重算，主线程抖动 |
+| 幂等 | 重复 `refresh` 不产生重复 DOM；**模块自产 DOM 不得再触发刷新**（按标题结构签名比较，结构未变则跳过写入） | **自触发刷新循环**：实测一次宿主写入会引发每 250ms 一次的空转刷新，永久不停止 |
+| 降级 | 单个模块抛错只 `console.warn` 并移除自身产物，不影响其它模块与宿主内容 | 一个增强点坏掉 → 整页增强全挂 |
+
 ### 11.4 路线
 
 | 版本 | 内容 | 目的 |
 |---|---|---|
 | `0.1.0-beta.0` | 引擎 + **Mermaid**（本轮） | **打通官方通道**（npm 发布 + `dsh plugin add` + 选中生效），验证客户端契约与降级表现 |
 | `0.1.0` | 同上，按验收意见收口 | 首个正式版 |
-| `0.2.0` | + **大纲/锚点（TOC）** | 一站式第二块（市场现有实现均为 ★0–3 的单功能件） |
+| `0.2.0` | + **大纲（TOC）** ✅ 代码完成（右侧可折叠面板 / 点击定位 / 滚动高亮 / 幂等） | 一站式第二块；新增「文档级模块」层（`src/client/docs.ts`） |
 | `0.3.0` | + **文档内搜索/高亮** | 同上 |
 | `0.4.0+` | + callout/脚注、表格增强、导出（按需求排序） | 补齐「一个顶五个」 |
 | `1.0.0` | 市场提交（先复核竞品与收录要求） | §8 第 8 步 |
@@ -310,10 +328,12 @@ interface EnhanceModule {
 |---|---|
 | 三段构建（宿主 ESM / 客户端 IIFE 包装 / 惰性运行时 ESM）+ 产物自检 | ✅ 通过（禁止 `module.exports`、校验注册 id、校验宿主注册了 webServer、校验资产自包含且已内联引擎） |
 | 单测：识别（语言类 + 无语言类兜底）、渲染成功、语法错误降级、引擎加载失败降级、超大源码降级、幂等、防串号、引擎幂等、降级重试 | ✅ 11 用例 / 35 断言 |
+| 单测：TOC（层级缩进、<2 标题隐藏、忽略代码块、幂等、点击定位、scroll spy、折叠持久化、文档级引擎重建、**不自触发刷新**） | ✅ 9 用例 / 20 断言 |
 | 实机 · 安装与组合（`dsh plugin add <绝对路径>`，隔离 profile） | ✅ 通过：pnpm 以 `link:` 装入、**自动追加进 `dsh.profile.bundles`**；`--dump-config` 中条目在位（非 `not-bundle`） |
 | 实机 · 宿主半侧激活（G2 前半） | ✅ 通过：`GET /dsh-markdown-plus/runtime/mermaid.js` → `200`、**7,717,526 字节**、`text/javascript` |
 | 实机 · 客户端半侧被请求（G2 后半） | ✅ 通过：`window.__DSH_BOOT__` 启动图含本插件行（`{id, url, rev}`），组合脚本内含 `window.__ModuleLoader__.load({ id: "@minonl/dsh-plugin-markdown-plus" …})` |
 | 实机 · 浏览器内真实渲染（无头 Chromium + 真实引擎 + 真实产物） | ✅ 通过：合法 flowchart → **1 个 SVG**（`viewBox="4.5 4 190 494"`，`width=100%`）、状态 `rendered`、源码折叠；语法错误 → `degraded` + 「Parse error on line 2」+ 源码保持可见；非图表块未误伤；无异常日志 |
+| e2e：TOC（9 条目 + 缩进序列、点击真实滚动、scroll spy、折叠、重渲染幂等）+ Mermaid 4 项 + 健康度 2 项 | ✅ 11 断言全通过（CI artifact 保留截图与 `report.json`） |
 | 浏览器真实页面内点击验证（DSH 外壳 UI） | ⏳ **人工验收（G4）**：需在 DSH 界面打开真实 `.md` 目视 |
 | 运行时体积优化（7.4 MB → 精简图表集 / 分包） | ⏳ v1.1（P7） |
 ### 11.6 本地独立调试（vite dev，不依赖 DSH）
@@ -327,3 +347,19 @@ interface EnhanceModule {
 
 该目录只服务开发，不进入 npm 包（`files` 白名单不含 `dev/`）。
 
+### 11.7 大纲形态（2026-10-28 用户拍板：停靠折叠）
+
+候选 4 形态（停靠折叠条 / 停靠展开 / 右缘浮动 / 细轨道）经真实宿主截图对比后，用户选定**停靠折叠**：
+
+| 决策 | 内容 |
+|---|---|
+| 形态 | 预览容器顶部一条 36px 折叠条（`大纲 · 展开`），点开展开为列表 |
+| 挂载点 | `[data-sidebar-right-tab]` 容器**滚动区之上**（`flex: 0 0 auto`）⇒ 正文滚动时保持可见（吸顶），不遮挡内容 |
+| 默认态 | 折叠（对齐 GitHub Docs「In this article」） |
+| 列表样式 | 层级缩进 + 左侧竖线 + 当前项左侧标记（参考 Next.js「On this page」） |
+| 窄窗 | 条状不变，宽度 100%，天然适配 400px 窄栏 |
+| 不做的 | 细轨道（28px 刻度）——用户认为它适合「读最新回复」，属**另一个独立需求**，另开插件 |
+
+设计参考（截图留档 `artifacts/ux/refs/`）：
+- GitHub Docs「In this article」：顶部折叠条 + 展开列表
+- Next.js Docs「On this page」：层级缩进 + 竖线 + 当前项标记

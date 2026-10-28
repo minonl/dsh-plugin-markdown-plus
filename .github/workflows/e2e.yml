@@ -1,0 +1,58 @@
+# 端到端验证：真实浏览器 + 真实引擎，产出截图与报告作为 CI 产物。
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # dsh 把包操作委派给 pnpm（profile 安装插件时必需）
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - run: bun install --frozen-lockfile
+
+      # CI 用 Playwright 自带 chromium（本地开发默认复用系统 Edge）
+      - run: bunx playwright install --with-deps chromium
+
+      - name: Run e2e
+        env:
+          E2E_CHANNEL: chromium
+        run: bun run test:e2e
+
+
+      # 真实 DSH 集成 e2e：装 dsh CLI → 建临时 profile 装 tarball → 起 web → 浏览器断言
+      # 这条是「插件加载失败」类问题的回归门（invalid plugin / factory 未物化 / 路由未注册）
+      - name: Install DSH CLI
+        run: npm install -g @deepseek-ai/dsh@0.2.1-rc.2
+
+      - name: Run real-DSH e2e
+        env:
+          E2E_CHANNEL: chromium
+          MDP_DSH_PORT: '3180'
+        run: bun run test:e2e:dsh
+
+      - name: Upload e2e artifacts (screenshots + report)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ github.sha }}
+          path: |
+            artifacts/e2e
+            artifacts/e2e-dsh
+          retention-days: 14

@@ -37,6 +37,58 @@ export const CSS = `
   color: inherit;
   cursor: pointer;
 }
+.mdp-toc {
+  /* 停靠在预览容器内部、滚动区之上：正文滚动时保持可见（吸顶），不遮挡内容 */
+  position: relative;
+  width: 100%;
+  max-height: none;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, Canvas 92%, currentColor 8%);
+  backdrop-filter: blur(6px);
+  z-index: 40;
+  overflow: hidden;
+}
+.mdp-toc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+.mdp-toc-title { flex: 1 1 auto; font-weight: 600; opacity: .85; }
+.mdp-toc-toggle {
+  font: inherit; font-size: 11px; padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 4px; background: transparent; color: inherit; cursor: pointer;
+}
+.mdp-toc-list {
+  list-style: none; margin: 0; padding: 4px 8px 8px 12px;
+  max-height: 40vh;
+  overflow-y: auto; overscroll-behavior: contain;
+  border-inline-start: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  margin-inline-start: 8px;
+}
+.mdp-toc-entry { margin: 0; }
+.mdp-toc-item {
+  display: block; width: 100%; text-align: start;
+  font: inherit; padding: 3px 8px; border: 0; background: transparent; color: inherit;
+  cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: .75;
+}
+.mdp-toc-item:hover { background: color-mix(in srgb, currentColor 8%, transparent); opacity: 1; }
+.mdp-toc-item[aria-current="true"] {
+  opacity: 1; font-weight: 600;
+  box-shadow: inset 2px 0 0 currentColor;
+}
+.mdp-toc-collapsed .mdp-toc-list { display: none; }
+.mdp-toc-collapsed { max-height: 34px; }
+@media (max-width: 1180px) { .mdp-toc { display: none; } }
 `;
 
 /** 注入样式（已存在则复用）。 */

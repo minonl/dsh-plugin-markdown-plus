@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+    <link rel="icon" href="data:," /><title>TOC 自检</title></head>
+<body>
+<main id="doc">
+  <h1>项目说明</h1><p>正文</p>
+  <h2>背景</h2><p>正文</p>
+  <h3>目标</h3><p>正文</p>
+  <h3>非目标</h3><p>正文</p>
+  <h2>架构</h2><p>正文</p>
+  <h3>引擎层</h3><p>正文</p>
+  <h3>模块层</h3><p>正文</p>
+  <h4>细节</h4><p>正文</p>
+  <h2>使用</h2><p>正文</p>
+</main>
+<script type="module">
+  // 自检页：加载真实模块 → 生成大纲 → 输出结构化结果（供无头浏览器取证）
+  const { tocModule } = await import('/src/client/modules/toc.ts');
+  const { ensureStyles } = await import('/src/client/styles.ts');
+  ensureStyles();
+  tocModule.refresh(document);
+  setTimeout(() => {
+    const items = [...document.querySelectorAll('[data-mdp-toc-item]')];
+    const out = {
+      panel: !!document.querySelector('[data-mdp-toc]'),
+      count: items.length,
+      texts: items.map((i) => i.textContent),
+      indents: items.map((i) => i.style.paddingInlineStart),
+      active: items.filter((i) => i.getAttribute('aria-current') === 'true').map((i) => i.textContent),
+      toggle: document.querySelector('.mdp-toc-toggle')?.textContent ?? null,
+    };
+    const el = document.createElement('pre');
+    el.id = 'RESULT';
+    el.textContent = JSON.stringify(out);
+    document.body.append(el);
+  }, 1200);
+</script>
+</body></html>
