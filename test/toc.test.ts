@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { startDocModules, type DocModule } from '../src/client/docs.js';
 import { tocModule } from '../src/client/modules/toc.js';
 
-const PANEL = '[data-mdp-toc]';
+const RAIL = 'nav[data-mdp-toc]';
 const ITEM = '[data-mdp-toc-item]';
 
 function setBody(html: string): void {
@@ -34,26 +34,26 @@ describe('大纲模块', () => {
 
     const items = [...document.querySelectorAll<HTMLElement>(ITEM)];
     expect(items.length).toBe(4);
-    expect(items.map((i) => i.textContent)).toEqual(['一', '一点一', '一点一点一', '一点二']);
-    // 缩进随层级递增
-    const indents = items.map((i) => parseInt(i.style.paddingInlineStart, 10));
-    expect(indents[0]).toBe(8);
-    expect(indents[1]).toBe(20);
-    expect(indents[2]).toBe(32);
-    expect(indents[3]).toBe(20);
+    expect(items.map((i) => i.getAttribute('aria-label'))).toEqual(['跳转到：一', '跳转到：一点一', '跳转到：一点一点一', '跳转到：一点二']);
+    // 层级以刻度宽度表达：一级最宽，越深越窄
+    const widths = items.map((i) => parseInt(i.style.width, 10));
+    expect(widths[0]).toBe(18);
+    expect(widths[1]).toBe(15);
+    expect(widths[2]).toBe(12);
+    expect(widths[3]).toBe(15);
   });
 
   test('标题不足 2 个时不显示面板', () => {
     setBody('<main><h1>只有一个标题</h1><p>正文</p></main>');
     refresh();
-    expect(document.querySelector(PANEL)).toBeNull();
+    expect(document.querySelector(RAIL)).toBeNull();
   });
 
   test('忽略代码块与面板自身里的标题', () => {
     setBody('<main><pre><code># 不是标题</code></pre><h1>真标题</h1><h2>另一个</h2></main>');
     refresh();
-    const items = [...document.querySelectorAll(ITEM)].map((i) => i.textContent);
-    expect(items).toEqual(['真标题', '另一个']);
+    const items = [...document.querySelectorAll(ITEM)].map((i) => i.getAttribute('aria-label'));
+    expect(items).toEqual(['跳转到：真标题', '跳转到：另一个']);
   });
 
   test('幂等：重复 refresh 只有一个面板、条目数稳定', () => {
@@ -61,7 +61,7 @@ describe('大纲模块', () => {
     refresh();
     refresh();
     refresh();
-    expect(document.querySelectorAll(PANEL).length).toBe(1);
+    expect(document.querySelectorAll(RAIL).length).toBe(1);
     expect(document.querySelectorAll(ITEM).length).toBe(2);
   });
 
@@ -90,15 +90,16 @@ describe('大纲模块', () => {
     }, 40));
   });
 
-  test('折叠状态可切换并持久化', () => {
+  test('悬浮刻度显示标题预览', () => {
     setBody('<main><h1>一</h1><h2>二</h2></main>');
     refresh();
-    const toggle = document.querySelector<HTMLButtonElement>('.mdp-toc-toggle') as HTMLButtonElement;
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    toggle.click();
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(localStorage.getItem('mdp:toc:collapsed')).toBe('1');
-    expect(document.querySelector(PANEL)?.classList.contains('mdp-toc-collapsed')).toBe(true);
+    const mark = document.querySelectorAll<HTMLButtonElement>(ITEM)[1] as HTMLButtonElement;
+    mark.dispatchEvent(new Event('mouseenter'));
+    const preview = document.querySelector('.mdp-toc-preview');
+    expect(preview?.textContent).toBe('二');
+    expect(preview?.classList.contains('mdp-toc-preview-visible')).toBe(true);
+    mark.dispatchEvent(new Event('mouseleave'));
+    expect(preview?.classList.contains('mdp-toc-preview-visible')).toBe(false);
   });
 
   test('文档级引擎：DOM 变化后自动重建大纲', async () => {

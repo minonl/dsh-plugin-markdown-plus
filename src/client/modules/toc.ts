@@ -1,22 +1,20 @@
 /**
- * 大纲（TOC）模块 —— 在页面右侧提供可折叠的文档大纲。
+ * 大纲（TOC）模块 —— 与 DSH 原生「轮次导航」同构的**右侧细轨道**。
  *
- * 设计取舍：
- *  - **整页作用域**而非"每篇文档一个面板"：宿主把 Markdown 渲染在会话消息/文档预览等多个位置，
- *    按容器挂面板会碎片化；整页大纲与市场同类实现（右侧大纲条）行为一致。
- *  - **不改宿主 DOM 属性**：不给标题补 id、不改 hash，避免与宿主的锚点/路由机制冲突；
- *    定位直接用 `scrollIntoView`。
- *  - **幂等**：同一文档只存在一个面板；内容变化时复用面板、替换列表项，保留折叠状态。
- *  - **降级**：标题不足 2 个、或计算失败 → 移除面板，不留空壳。
+ * 为什么改成轨道而不是面板：宿主原生大纲（`nav[aria-label="轮次导航"]`，宽 28px、
+ * 贴右边缘 12px、刻度 + 悬浮预览 + 点击跳转 + 边缘渐隐）已经培养了用户习惯；
+ * 我们做成同构交互，既不遮挡内容，也不与原生控件打架。
+ *
+ * 契约：幂等（同页只一条轨道）、降级（标题不足则移除）、scroll spy、防抖重建。
  */
 import type { DocModule } from '../docs.js';
 
-const PANEL_ATTR = 'data-mdp-toc';
-const ITEM_ATTR = 'data-mdp-toc-item';
+const RAIL_ATTR = 'data-mdp-toc';
+const MARK_ATTR = 'data-mdp-toc-item';
 const ACTIVE_ATTR = 'aria-current';
 const MIN_HEADINGS = 2;
 const SCROLL_OFFSET_PX = 80;
-const STORAGE_KEY = 'mdp:toc:collapsed';
+const MARK_GAP_PX = 10;
 
 interface TocEntry {
   readonly el: HTMLElement;
@@ -25,52 +23,34 @@ interface TocEntry {
 }
 
 interface TocState {
-  panel: HTMLElement | null;
-  list: HTMLElement | null;
+  rail: HTMLElement | null;
+  marks: HTMLElement | null;
+  preview: HTMLElement | null;
   entries: TocEntry[];
+  signature: string;
   activeIndex: number;
-  collapsed: boolean;
   onScroll: (() => void) | null;
   rafPending: boolean;
-  /** 标题结构签名：用于「结构没变就不重写 DOM」，避免自己的写入再触发刷新。 */
-  signature: string | null;
 }
 
 const state: TocState = {
-  panel: null,
-  list: null,
+  rail: null,
+  marks: null,
+  preview: null,
   entries: [],
+  signature: '',
   activeIndex: -1,
-  collapsed: readCollapsed(),
   onScroll: null,
   rafPending: false,
-  signature: null,
 };
 
-function readCollapsed(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function writeCollapsed(collapsed: boolean): void {
-  try {
-    globalThis.localStorage?.setItem(STORAGE_KEY, collapsed ? '1' : '0');
-  } catch {
-    /* 隐私模式下不可写：忽略 */
-  }
-}
-
-/** 收集标题：排除代码块、导航、以及本插件自己的产物。 */
+/** 收集标题：排除代码块、导航、插件自身产物。 */
 function collectHeadings(doc: Document): TocEntry[] {
   const scope: ParentNode = doc.querySelector('main') ?? doc.body;
   if (scope === null) return [];
-  const nodes = scope.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6');
   const entries: TocEntry[] = [];
-  for (const el of nodes) {
-    if (el.closest(`[${PANEL_ATTR}]`) !== null) continue;
+  for (const el of scope.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')) {
+    if (el.closest(`[${RAIL_ATTR}]`) !== null) continue;
     if (el.closest('pre, code, nav, [aria-hidden="true"]') !== null) continue;
     const text = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
     if (text === '') continue;
@@ -79,83 +59,66 @@ function collectHeadings(doc: Document): TocEntry[] {
   return entries;
 }
 
-/** 标题结构签名：层级 + 文案；结构相同即无需重写列表。 */
-function signatureOf(entries: readonly TocEntry[]): string {
-  return entries.map((entry) => `${entry.level}\u0000${entry.text}`).join('\u0001');
-}
-
-function ensurePanel(doc: Document): { panel: HTMLElement; list: HTMLElement } {
-  const existing = doc.querySelector<HTMLElement>(`[${PANEL_ATTR}]`);
+function ensureRail(doc: Document): { rail: HTMLElement; marks: HTMLElement; preview: HTMLElement } {
+  const existing = doc.querySelector<HTMLElement>(`nav[${RAIL_ATTR}]`);
   if (existing !== null) {
-    const list = existing.querySelector<HTMLElement>(`.mdp-toc-list`);
-    if (list !== null) {
-      state.panel = existing;
-      state.list = list;
-      return { panel: existing, list };
+    const marks = existing.querySelector<HTMLElement>('.mdp-toc-marks');
+    const preview = existing.querySelector<HTMLElement>('.mdp-toc-preview');
+    if (marks !== null && preview !== null) {
+      state.rail = existing;
+      state.marks = marks;
+      state.preview = preview;
+      return { rail: existing, marks, preview };
     }
     existing.remove();
   }
 
-  const panel = doc.createElement('nav');
-  panel.setAttribute(PANEL_ATTR, '');
-  panel.className = 'mdp-toc';
-  panel.setAttribute('aria-label', '文档大纲');
+  const rail = doc.createElement('nav');
+  rail.setAttribute(RAIL_ATTR, '');
+  rail.className = 'mdp-toc-rail';
+  rail.setAttribute('aria-label', '文档大纲');
 
-  const header = doc.createElement('div');
-  header.className = 'mdp-toc-header';
+  const marks = doc.createElement('div');
+  marks.className = 'mdp-toc-marks';
 
-  const title = doc.createElement('span');
-  title.className = 'mdp-toc-title';
-  title.textContent = '大纲';
+  const preview = doc.createElement('div');
+  preview.className = 'mdp-toc-preview';
+  preview.setAttribute('aria-hidden', 'true');
 
-  const toggle = doc.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'mdp-toc-toggle';
-  toggle.setAttribute('aria-expanded', String(!state.collapsed));
-  toggle.textContent = state.collapsed ? '展开' : '收起';
-  toggle.addEventListener('click', () => {
-    state.collapsed = !state.collapsed;
-    writeCollapsed(state.collapsed);
-    applyCollapsed();
-  });
+  rail.append(marks, preview);
+  doc.body.append(rail);
 
-  header.append(title, toggle);
-
-  const list = doc.createElement('ol');
-  list.className = 'mdp-toc-list';
-
-  panel.append(header, list);
-  doc.body.append(panel);
-
-  state.panel = panel;
-  state.list = list;
-  applyCollapsed();
-  return { panel, list };
+  state.rail = rail;
+  state.marks = marks;
+  state.preview = preview;
+  return { rail, marks, preview };
 }
 
-function applyCollapsed(): void {
-  if (state.panel === null) return;
-  state.panel.classList.toggle('mdp-toc-collapsed', state.collapsed);
-  const toggle = state.panel.querySelector<HTMLButtonElement>('.mdp-toc-toggle');
-  if (toggle !== null) {
-    toggle.textContent = state.collapsed ? '展开' : '收起';
-    toggle.setAttribute('aria-expanded', String(!state.collapsed));
-  }
+function showPreview(entry: TocEntry, mark: HTMLElement): void {
+  if (state.preview === null || state.rail === null) return;
+  const railRect = state.rail.getBoundingClientRect();
+  const markRect = mark.getBoundingClientRect();
+  state.preview.textContent = entry.text;
+  state.preview.classList.add('mdp-toc-preview-visible');
+  const top = Math.max(0, markRect.top - railRect.top - 8);
+  state.preview.style.transform = `translateY(${top}px)`;
+  state.preview.setAttribute('aria-hidden', 'false');
+}
+
+function hidePreview(): void {
+  if (state.preview === null) return;
+  state.preview.classList.remove('mdp-toc-preview-visible');
+  state.preview.setAttribute('aria-hidden', 'true');
 }
 
 function setActive(index: number): void {
-  if (state.list === null || index === state.activeIndex) return;
-  const items = state.list.querySelectorAll<HTMLElement>(`[${ITEM_ATTR}]`);
-  items.forEach((item, i) => {
-    if (i === index) item.setAttribute(ACTIVE_ATTR, 'true');
-    else item.removeAttribute(ACTIVE_ATTR);
+  if (state.marks === null || index === state.activeIndex) return;
+  const marks = state.marks.querySelectorAll<HTMLElement>(`[${MARK_ATTR}]`);
+  marks.forEach((mark, i) => {
+    if (i === index) mark.setAttribute(ACTIVE_ATTR, 'true');
+    else mark.removeAttribute(ACTIVE_ATTR);
   });
   state.activeIndex = index;
-  const active = items[index];
-  if (active !== undefined && typeof active.scrollIntoView === 'function') {
-    // 只让大纲自身滚动，不影响页面
-    active.scrollIntoView({ block: 'nearest' });
-  }
 }
 
 function scrollToEntry(entry: TocEntry): void {
@@ -192,30 +155,32 @@ function bindScroll(): void {
   globalThis.addEventListener?.('scroll', handler, { passive: true });
 }
 
-function renderList(doc: Document, list: HTMLElement, entries: TocEntry[]): void {
+/** 刻度：层级越深越短（一级最宽），与原生的等宽刻度区分层级。 */
+function renderMarks(doc: Document, marks: HTMLElement, entries: TocEntry[]): void {
   const minLevel = Math.min(...entries.map((entry) => entry.level));
   const fragment = doc.createDocumentFragment();
   entries.forEach((entry, index) => {
-    const li = doc.createElement('li');
-    li.className = 'mdp-toc-entry';
-    const button = doc.createElement('button');
-    button.type = 'button';
-    button.setAttribute(ITEM_ATTR, String(index));
-    button.className = 'mdp-toc-item';
-    button.style.paddingInlineStart = `${(entry.level - minLevel) * 12 + 8}px`;
-    button.textContent = entry.text;
-    button.title = entry.text;
-    button.addEventListener('click', () => {
-      // 按索引取当前元素：流式重渲染可能已替换 DOM 节点，闭包里的旧引用会指向游离节点。
-      const target = state.entries[index];
-      if (target === undefined) return;
+    const mark = doc.createElement('button');
+    mark.type = 'button';
+    mark.setAttribute(MARK_ATTR, String(index));
+    mark.className = 'mdp-toc-mark';
+    mark.dataset.level = String(entry.level);
+    const depth = Math.min(entry.level - minLevel, 3);
+    mark.style.width = `${18 - depth * 3}px`;
+    mark.style.transform = `translate3d(0, ${index * MARK_GAP_PX}px, 0)`;
+    mark.setAttribute('aria-label', `跳转到：${entry.text}`);
+    mark.addEventListener('mouseenter', () => showPreview(entry, mark));
+    mark.addEventListener('mouseleave', hidePreview);
+    mark.addEventListener('focus', () => showPreview(entry, mark));
+    mark.addEventListener('blur', hidePreview);
+    mark.addEventListener('click', () => {
       setActive(index);
-      scrollToEntry(target);
+      scrollToEntry(entry);
     });
-    li.append(button);
-    fragment.append(li);
+    fragment.append(mark);
   });
-  list.replaceChildren(fragment);
+  marks.replaceChildren(fragment);
+  marks.style.height = `${Math.max(entries.length * MARK_GAP_PX, MARK_GAP_PX)}px`;
 }
 
 function teardown(): void {
@@ -223,12 +188,13 @@ function teardown(): void {
     globalThis.removeEventListener?.('scroll', state.onScroll);
     state.onScroll = null;
   }
-  state.panel?.remove();
-  state.panel = null;
-  state.list = null;
+  state.rail?.remove();
+  state.rail = null;
+  state.marks = null;
+  state.preview = null;
   state.entries = [];
+  state.signature = '';
   state.activeIndex = -1;
-  state.signature = null;
 }
 
 export const tocModule: DocModule = {
@@ -240,16 +206,14 @@ export const tocModule: DocModule = {
       teardown();
       return;
     }
-    // **结构没变就不重写 DOM**：文档级 observer 观察整页子树，自己的写入会被再次观察到，
-    // 不设这道闸就会每 250ms 刷新一次、永不停止（实测：一次宿主写入引发 6 次 refresh）。
-    const signature = signatureOf(entries);
-    const unchanged = state.panel !== null && state.list !== null && state.signature === signature;
-    state.entries = entries;
-    if (!unchanged) {
-      const { list } = ensurePanel(doc);
-      renderList(doc, list, entries);
-      state.activeIndex = -1;
+    const { marks } = ensureRail(doc);
+    // 幂等短路：标题结构没变就不碰 DOM（否则会被自己的 MutationObserver 反复触发）
+    const signature = entries.map((entry) => `${entry.level}:${entry.text}`).join('|');
+    if (signature !== state.signature) {
+      state.entries = entries;
       state.signature = signature;
+      renderMarks(doc, marks, entries);
+      state.activeIndex = -1;
     }
     bindScroll();
     updateActiveByScroll();

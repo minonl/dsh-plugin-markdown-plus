@@ -107,10 +107,10 @@ try {
     const toc = await page.evaluate(() => ({
       count: document.querySelectorAll('[data-mdp-toc-item]').length,
       texts: [...document.querySelectorAll('[data-mdp-toc-item]')].map((i) => i.textContent),
-      indents: [...document.querySelectorAll('[data-mdp-toc-item]')].map((i) => parseInt(i.style.paddingInlineStart, 10)),
+      widths: [...document.querySelectorAll('[data-mdp-toc-item]')].map((i) => parseInt(i.style.width, 10)),
       panels: document.querySelectorAll('[data-mdp-toc]').length,
     }));
-    record('toc: 条目数与层级缩进', toc.count === 9 && JSON.stringify(toc.indents) === JSON.stringify([8, 20, 32, 32, 20, 32, 32, 44, 20]), `indents=${JSON.stringify(toc.indents)}`);
+    record('toc: 刻度数量与层级宽度', toc.count === 9 && JSON.stringify(toc.widths) === JSON.stringify([18, 15, 12, 12, 15, 12, 12, 9, 15]), `widths=${JSON.stringify(toc.widths)}`);
 
     // 点击第 5 项 → 页面滚动 + 该项高亮
     const beforeY = await page.evaluate(() => window.scrollY);
@@ -129,12 +129,15 @@ try {
     record('toc: 滚动时高亮跟随（scroll spy）', afterScroll >= 6, `active=${afterScroll}`);
     await page.screenshot({ path: `${outDir}/toc.png`, fullPage: false });
 
-    // 折叠
-    await page.click('.mdp-toc-toggle');
+    // 悬浮预览（与原生轨道同构的交互）
+    await page.hover('[data-mdp-toc-item="2"]');
     await page.waitForTimeout(200);
-    const collapsed = await page.evaluate(() => document.querySelector('[data-mdp-toc]')?.classList.contains('mdp-toc-collapsed') === true);
-    record('toc: 可折叠', collapsed === true, `collapsed=${collapsed}`);
-    await page.screenshot({ path: `${outDir}/toc-collapsed.png`, fullPage: false });
+    const preview = await page.evaluate(() => {
+      const el = document.querySelector('.mdp-toc-preview');
+      return { text: el?.textContent ?? null, visible: el?.classList.contains('mdp-toc-preview-visible') ?? false };
+    });
+    record('toc: 悬浮刻度显示标题预览', preview.visible && (preview.text ?? '').length > 0, `preview=${preview.text}`);
+    await page.screenshot({ path: `${outDir}/toc-hover.png`, fullPage: false });
 
     // 幂等：同一内容重复刷新不产生重复面板/条目
     await page.evaluate(() => {
