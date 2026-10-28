@@ -37,65 +37,55 @@ export const CSS = `
   color: inherit;
   cursor: pointer;
 }
-/* —— 大纲轨道：与 DSH 原生「轮次导航」同构（宽 28px、贴右 12px、刻度 + 悬浮预览）—— */
-.mdp-toc-rail {
+.mdp-toc {
   position: fixed;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 28px;
-  max-height: 60vh;
+  top: 96px;
+  right: 20px;
+  width: 232px;
+  max-height: calc(100vh - 140px);
+  display: flex;
+  flex-direction: column;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, Canvas 92%, currentColor 8%);
+  backdrop-filter: blur(6px);
+  z-index: 40;
+  overflow: hidden;
+}
+.mdp-toc-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 40;
-  pointer-events: auto;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
 }
-.mdp-toc-marks {
-  position: relative;
-  width: 28px;
+.mdp-toc-title { flex: 1 1 auto; font-weight: 600; opacity: .85; }
+.mdp-toc-toggle {
+  font: inherit; font-size: 11px; padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-radius: 4px; background: transparent; color: inherit; cursor: pointer;
 }
-.mdp-toc-mark {
-  position: absolute;
-  top: 0;
-  right: 5px;
-  height: 3px;
-  padding: 0;
-  border: 0;
-  border-radius: 2px;
-  background: color-mix(in srgb, currentColor 32%, transparent);
-  cursor: pointer;
-  transition: background .12s ease, width .12s ease;
+.mdp-toc-list {
+  list-style: none; margin: 0; padding: 4px 0;
+  overflow-y: auto; overscroll-behavior: contain;
 }
-.mdp-toc-mark:hover,
-.mdp-toc-mark:focus-visible {
-  background: color-mix(in srgb, currentColor 75%, transparent);
+.mdp-toc-entry { margin: 0; }
+.mdp-toc-item {
+  display: block; width: 100%; text-align: start;
+  font: inherit; padding: 3px 8px; border: 0; background: transparent; color: inherit;
+  cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: .75;
 }
-.mdp-toc-mark[aria-current="true"] {
-  background: currentColor;
-  height: 4px;
+.mdp-toc-item:hover { background: color-mix(in srgb, currentColor 8%, transparent); opacity: 1; }
+.mdp-toc-item[aria-current="true"] {
+  opacity: 1; font-weight: 600;
+  box-shadow: inset 2px 0 0 currentColor;
+  background: color-mix(in srgb, currentColor 10%, transparent);
 }
-.mdp-toc-preview {
-  position: absolute;
-  right: 32px;
-  max-width: 280px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: color-mix(in srgb, Canvas 92%, currentColor 8%);
-  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
-  box-shadow: 0 2px 8px rgba(0,0,0,.12);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .1s ease;
-}
-.mdp-toc-preview-visible { opacity: 1; }
-@media (max-width: 900px) { .mdp-toc-rail { display: none; } }
-
+.mdp-toc-collapsed .mdp-toc-list { display: none; }
+@media (max-width: 1180px) { .mdp-toc { display: none; } }
 `;
 
 /** 注入样式（已存在则复用）。 */
