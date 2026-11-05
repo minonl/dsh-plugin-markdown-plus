@@ -249,3 +249,17 @@ dsh plugin --profile <test> add @minonl/dsh-plugin-markdown-plus@<ver>
 dsh --profile <test> --no-open
 #   核对：GET /dsh-markdown-plus/runtime/mermaid.js → 200；__DSH_BOOT__ 含本插件
 ```
+
+
+## 已知坑（2026-11 实测，血泪）
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `exchange status: 404` / `ENEEDAUTH` | **Trusted Publisher 绑定的是仓库 ID**，删库重建或改名后旧配置永久失配 | 在包设置页**删掉旧条目再加一次**；同一路径重存不会刷新 ID |
+| 同上，且 `npm trust list` 为空 | 首次 `npm trust` 时包还不存在，命令看似成功但没写入 | 包存在后再执行 `npm trust github … --allow-publish` |
+| `registry-url` 删掉后 `ENEEDAUTH` | npm 需要在 `.npmrc` 里看到 registry 配置 | **保留** `registry-url` |
+| 保留 `registry-url` 仍不走 OIDC | setup-node 写了 `_authToken=${NODE_AUTH_TOKEN}` 占位 | 发布前 `sed -i '/_authToken/d' "$npmrc"` |
+| 静默 404（Node 22） | 自带 npm 10，不交换 OIDC | Node 24 + 断言 npm ≥ 11.5.1 |
+
+> 排障顺序：先看 workflow 里 `OIDC preflight` 的 `exchange status`。
+> `200` = 信任 OK；`404` = 配置不存在/仓库 ID 不符；`401` = claims 不匹配（repo/workflow 名拼错）。
