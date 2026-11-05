@@ -52,6 +52,37 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
+      # npm < 11.5.1 没有 OIDC 交换能力（会静默降级成匿名 → 404/ENEEDAUTH）
+      - name: 确保 npm >= 11.5.1
+        run: |
+          npm install -g npm@latest
+          v=$(npm -v); echo "npm $v"; major=${v%%.*}
+          [ "$major" -ge 11 ] || { echo "::error::npm $v 不支持 trusted publishing"; exit 1; }
+
+      # setup-node 会写 `_authToken=${NODE_AUTH_TOKEN}` 占位；没有 token 时 npm 看到它就
+      # 不走 OIDC（npm/documentation#1960）。删掉这一行，保留 registry。
+      - name: 去掉占位 token，让 npm 走 OIDC
+        run: |
+          npmrc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          sed -i '/_authToken/d' "$npmrc" || true
+          grep -c "_authToken" "$npmrc" || true
+
+      # 交换诊断：只打印状态码，不打印 token/响应体
+      - name: OIDC preflight
+        run: |
+          set -u
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "::error::缺少 id-token 环境变量（检查 permissions: id-token: write）"; exit 1
+          fi
+          ID=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:registry.npmjs.org" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("value",""))')
+          [ -n "$ID" ] || { echo "::error::拿不到 OIDC token"; exit 1; }
+          PKG=$(node -p "require('./package.json').name" | sed 's#/#%2f#')
+          code=$(curl -s -o /tmp/ex.json -w '%{http_code}' -X POST -H "Authorization: Bearer $ID" \
+            "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/$PKG")
+          echo "exchange status: $code"
+          [ "$code" = "200" ] || { echo "--- body ---"; head -c 500 /tmp/ex.json; exit 1; }
+
       - name: Resolve version and dist-tag
         id: ver
         env:
